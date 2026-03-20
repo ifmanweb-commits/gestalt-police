@@ -11,14 +11,9 @@ if [ ! -f config.json ]; then
     echo "Создание config.json..."
     cat > config.json << 'EOF'
 {
-    "admin_ids": [],
-    "allowed_chats": [],
-    "spam_keywords": [],
-    "settings": {
-        "delete_spam": true,
-        "ban_user": false,
-        "log_spam": true
-    }
+  "superuser_id": 260509440,
+  "experts_chat_id": 2000000374,
+  "group_id": 236116938
 }
 EOF
     echo "config.json создан"
@@ -30,63 +25,52 @@ fi
 if [ ! -f custom_commands.json ]; then
     echo "Создание custom_commands.json..."
     cat > custom_commands.json << 'EOF'
-{
-    "commands": []
-}
+{}
 EOF
     echo "custom_commands.json создан"
 else
     echo "custom_commands.json уже существует"
 fi
 
-# Создаём bot_database.json если не существует
+# Создаём bot_database.json если не существует (TinyDB формат)
 if [ ! -f bot_database.json ]; then
     echo "Создание bot_database.json..."
-    cat > bot_database.json << 'EOF'
-{
-    "users": {},
-    "banned_users": [],
-    "spam_stats": {}
-}
-EOF
+    echo '{"_default": {}}' > bot_database.json
     echo "bot_database.json создан"
 else
     echo "bot_database.json уже существует"
 fi
 
-# Создаём bot.log если не существует
-if [ ! -f bot.log ]; then
-    echo "Создание bot.log..."
-    touch bot.log
-    echo "bot.log создан"
-else
-    echo "bot.log уже существует"
-fi
-
-# Создаём experts.json если не существует
+# Создаём experts.json если не существует (TinyDB формат)
 if [ ! -f experts.json ]; then
     echo "Создание experts.json..."
-    echo '{}' > experts.json
+    echo '{"_default": {}}' > experts.json
     echo "experts.json создан"
 else
     echo "experts.json уже существует"
 fi
 
-# Создаём questions.json если не существует
+# Создаём questions.json если не существует (TinyDB формат)
 if [ ! -f questions.json ]; then
     echo "Создание questions.json..."
-    echo '{}' > questions.json
+    echo '{"_default": {}}' > questions.json
     echo "questions.json создан"
 else
     echo "questions.json уже существует"
 fi
 
+# Создаём папки для логов и данных
+mkdir -p logs data
+
 # Проверяем .env
 if [ ! -f .env ]; then
     echo "ВНИМАНИЕ: Файл .env отсутствует!"
-    echo "Скопируйте .env.example в .env и заполните токен VK:"
-    echo "  cp .env.example .env"
-    echo "  Отредактируйте .env и укажите VK_TOKEN"
+    if [ -f .env.example ]; then
+        echo "Скопируйте .env.example в .env и заполните токен VK:"
+        echo "  cp .env.example .env"
+    else
+        echo "Создайте .env с содержимым: VK_TOKEN=ваш_токен"
+    fi
 else
     echo ".env уже существует"
 fi

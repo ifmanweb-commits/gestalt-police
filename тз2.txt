@@ -1,133 +1,111 @@
-Верно. Вот реализация.
+Если в сообщения сообщества пишут сообщение, которое начинается с "#вопрос" - нужно:
+1) отрезать команду #вопрос от текста вопроса
+2) Собрать данные о пользователе, задавшем вопрос
+3) Занести вопрос в БД согласно структуре
+4) Получить айди чата экспертов (в конфиге нужно новое поле, кроме айди суперпользователя типа experts_chat_id
+5) В этот чат экспертов отправить сообщения: "Вопрос экспертам:" и с новой строки - текст вопроса.
+Для этого необходимо использовать функции работы с вопросами, которые нужно разместить в новом модуле questions.py
 
-## 📝 Изменения в `experts.py`
+{
+  "superuser_id": 260509440,
+  "experts_chat_id": 2000000374
+}
 
-Добавляем новую асинхронную функцию:
+2. Новый модуль questions.py
+2.1 Функции работы с БД
+Функция	Описание
+init_questions_db()	Проверяет существование questions.json, создаёт {"_default": {}} если нет
+get_questions_db()	Возвращает TinyDB экземпляр
+add_question(user_id, user_name, question_text, user_link)	Добавляет вопрос, возвращает question_id
+2.2 Структура вопроса в БД
+json
+{
+  "_default": {
+    "1": {
+      "id": 1,
+      "user_id": 123456789,
+      "user_name": "Анна Петрова",
+      "user_link": "https://vk.com/id123456789",
+      "question_text": "Как работать с сопротивлением?",
+      "timestamp": "2026-03-20T18:30:00",
+      "post_id": null,
+      "expert_answers": []
+    }
+  }
+}
 
-```python
-import re
-import logging
-from vkbottle import API
+2.3 Вспомогательные функции
+Функция	Описание
+get_next_question_id()	Возвращает следующий ID (max + 1)
+format_question_for_experts(question_data)	Форматирует вопрос для отправки экспертам
 
-async def resolve_user_id(api: API, identifier: str) -> int:
-    """
-    Определяет user_id по числу или ссылке.
-    
-    Args:
-        api: VK API
-        identifier: Числовой ID или ссылка на профиль
-        
-    Returns:
-        int: user_id или None, если не удалось определить
-    """
-    # Пробуем распарсить как число
-    if identifier.isdigit():
-        user_id = int(identifier)
-        try:
-            user_info = await api.users.get(user_ids=[user_id])
-            if user_info:
-                return user_id
-            else:
-                logging.warning(f"Пользователь с ID {user_id} не найден")
-                return None
-        except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
-            return None
-    
-    # Пробуем извлечь из ссылки
-    # Формат: https://vk.com/id123456789 или https://vk.com/username
-    match = re.search(r'vk\.com/(?:id)?([a-zA-Z0-9_]+)', identifier)
-    if not match:
-        return None
-    
-    screen_name = match.group(1)
-    
-    # Если это числовой ID в ссылке
-    if screen_name.isdigit():
-        user_id = int(screen_name)
-        try:
-            user_info = await api.users.get(user_ids=[user_id])
-            if user_info:
-                return user_id
-        except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
-            return None
-    
-    # Это короткое имя (screen_name)
+3. Изменения в vk_bot.py
+3.1 Импорт
+python
+from questions import init_questions_db, add_question, format_question_for_experts
+3.2 Загрузка experts_chat_id
+В начале файла (после load_dotenv()) добавить
+
+EXPERTS_CHAT_ID = None
+
+def load_experts_chat_id():
+    global EXPERTS_CHAT_ID
     try:
-        user_info = await api.users.get(user_ids=[screen_name])
-        if user_info:
-            return user_info[0].id
-        else:
-            logging.warning(f"Пользователь с именем {screen_name} не найден")
-            return None
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+            EXPERTS_CHAT_ID = config.get("experts_chat_id")
     except Exception as e:
-        logging.error(f"Ошибка получения ID по screen_name {screen_name}: {e}")
-        return None
-```
+        logging.error(f"Не удалось загрузить experts_chat_id: {e}")
+Вызывать в main() после load_config().
 
-## 📝 Изменения в `vk_bot.py`
+3.3 Обработчик сообщений в личку
+Добавить новый обработчик выше эхо-обработчика:
 
-В обработчике `/expertreg`:
-
-```python
-@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertreg"))
-async def expertreg(message):
-    """Обработчик команды /expertreg - регистрация эксперта."""
-    args = message.text.split()
-    if len(args) < 2:
-        await message.answer('Добавьте ID пользователя или ссылку на профиль.\nПримеры:\n/expertreg 123456789\n/expertreg https://vk.com/id123456789\n/expertreg https://vk.com/username')
+python
+@bot.on.message(IsPrivateRule())
+async def handle_question(message):
+    """Обработка сообщений, начинающихся с #вопрос"""
+    text = message.text
+    if not text or not text.startswith('#вопрос'):
         return
     
-    identifier = args[1]
+    # Отрезаем команду
+    question_text = text.replace('#вопрос', '', 1).strip()
     
-    # Определяем user_id
-    user_id = await resolve_user_id(api, identifier)
-    
-    if user_id is None:
-        await message.answer('Не удалось определить пользователя. Проверьте ID или ссылку.')
+    if not question_text:
+        await message.answer("Вы не задали вопрос. Напишите: #вопрос Ваш вопрос")
         return
     
-    # Добавляем эксперта
-    result = add_expert(user_id, identifier)
-    await message.answer(result['message'])
-```
-
-## 📝 Что происходит
-
-1. **Если передано число** (`/expertreg 123456789`) — проверяем его через API
-2. **Если передана ссылка с ID** (`https://vk.com/id123456789`) — извлекаем ID, проверяем через API
-3. **Если передана ссылка с именем** (`https://vk.com/durov`) — получаем ID через API по `screen_name`
-
-## 📝 Обработка `/expertdel`
-
-Для удаления тоже можно упростить — принимать ID напрямую:
-
-```python
-@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertdel"))
-async def expertdel(message):
-    args = message.text.split()
-    if len(args) < 2:
-        await message.answer('Добавьте ID пользователя после команды.\nПример: /expertdel 123456789')
-        return
+    # Получаем данные о пользователе
+    user_id = message.from_id
+    user_name = f"user{user_id}"  # Временно, позже можно через API
+    user_link = f"https://vk.com/id{user_id}"
     
-    try:
-        user_id = int(args[1])
-    except ValueError:
-        await message.answer('ID должен быть числом.')
-        return
+    # Сохраняем в БД
+    question_id = add_question(user_id, user_name, question_text, user_link)
     
-    result = remove_expert(user_id)
-    await message.answer(result['message'])
-```
+    # Отправляем экспертам
+    if EXPERTS_CHAT_ID:
+        expert_message = f"📩 **Новый вопрос экспертам**\n\n{question_text}"
+        await api.messages.send(
+            peer_id=EXPERTS_CHAT_ID,
+            message=expert_message,
+            random_id=random.randint(1, 2**31)
+        )
+    
+    # Ответ пользователю
+    await message.answer("✅ Ваш вопрос отправлен экспертам. Ответ придет в личные сообщения.")
 
-## 📝 Обработка `/expertlist` — без изменений
+    6. Дополнительно (для агента)
+questions.json должен создаваться с {"_default": {}} аналогично experts.json
 
-## ⚠️ Важно
+В init-files.sh добавить создание questions.json с правильным форматом
 
-`resolve_user_id` использует `api.users.get`, который может вернуть пустой список, если пользователь:
-- Не существует
-- Удалён
-- Имеет ограничения приватности (для коротких имён)
+Все асинхронные вызовы await
 
-В таких случаях функция вернёт `None`, и бот покажет сообщение об ошибке.
+ID вопросов автоинкрементные (максимальный существующий + 1)
+
+Если пользователь отправил пустой #вопрос - ответить ему текстом:
+"Вы неверно задали вопрос. Напишите #вопрос и дальше - развёрнутый текст вопроса одним большим сообщением."
+
+Добавить в конфиг айди группы "Зона роста" - 236116938

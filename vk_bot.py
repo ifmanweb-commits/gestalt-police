@@ -18,6 +18,9 @@ from experts import (
     init_databases, is_expert, add_expert, remove_expert,
     get_expert_list, extract_user_id_from_url, resolve_user_id
 )
+from questions import (
+    init_questions_db, add_question, format_question_for_experts
+)
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -37,14 +40,28 @@ logging.basicConfig(
 # Загрузка конфигурации
 CONFIG_FILE = "./config.json"
 
+# Глобальные переменные для конфигурации
+SUPERUSER_ID = None
+EXPERTS_CHAT_ID = None
+GROUP_ID = None
+
 def load_config():
     """Загружает конфигурацию из config.json."""
+    global SUPERUSER_ID, EXPERTS_CHAT_ID, GROUP_ID
     try:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
-                if config.get('superuser_id') is None:
+                SUPERUSER_ID = config.get('superuser_id')
+                EXPERTS_CHAT_ID = config.get('experts_chat_id')
+                GROUP_ID = config.get('group_id')
+                
+                if SUPERUSER_ID is None:
                     logging.error("superuser_id не найден в config.json")
+                if EXPERTS_CHAT_ID is None:
+                    logging.warning("experts_chat_id не найден в config.json")
+                if GROUP_ID is None:
+                    logging.warning("group_id не найден в config.json")
         else:
             logging.error("config.json не найден")
     except json.JSONDecodeError as e:
@@ -479,6 +496,67 @@ async def expertlist(message):
     
     await message.answer(result)
 
+# ============================================================================
+# ОБРАБОТКА ВОПРОСОВ ЭКСПЕРТАМ (#вопрос в личке сообщества)
+# ============================================================================
+
+@bot.on.message(IsPrivateRule())
+async def handle_question(message):
+    """
+    Обработка сообщений, начинающихся с #вопрос.
+    Работает для всех пользователей в личных сообщениях сообщества.
+    """
+    text = message.text
+    if not text or not text.startswith('#вопрос'):
+        return
+    
+    # Отрезаем команду #вопрос от текста
+    question_text = text.replace('#вопрос', '', 1).strip()
+    
+    # Проверяем, что вопрос не пустой
+    if not question_text:
+        await message.answer("Вы неверно задали вопрос. Напишите #вопрос и дальше — развёрнутый текст вопроса одним большим сообщением.")
+        return
+    
+    # Получаем данные о пользователе
+    user_id = message.from_id
+    
+    # Получаем имя пользователя через API
+    try:
+        user_info = await api.users.get(user_ids=[user_id])
+        user_name = f"{user_info[0].first_name} {user_info[0].last_name}" if user_info else f"user{user_id}"
+    except Exception as e:
+        logging.error(f"Не удалось получить имя пользователя {user_id}: {e}")
+        user_name = f"user{user_id}"
+    
+    user_link = f"https://vk.com/id{user_id}"
+    
+    # Сохраняем вопрос в БД
+    question_id = add_question(user_id, user_name, question_text, user_link)
+    logging.info(f"Добавлен вопрос #{question_id} от пользователя {user_id}")
+    
+    # Отправляем вопрос экспертам в чат
+    if EXPERTS_CHAT_ID:
+        expert_message = format_question_for_experts({
+            "user_link": user_link,
+            "question_text": question_text
+        })
+        try:
+            await api.messages.send(
+                peer_id=EXPERTS_CHAT_ID,
+                message=expert_message,
+                random_id=random.randint(1, 2**31)
+            )
+            logging.info(f"Вопрос #{question_id} отправлен в чат экспертов {EXPERTS_CHAT_ID}")
+        except Exception as e:
+            logging.error(f"Ошибка при отправке вопроса экспертам: {e}")
+            await message.answer("❌ Произошла ошибка при отправке вопроса. Попробуйте позже.")
+            return
+    
+    # Ответ пользователю
+    await message.answer("✅ Ваш вопрос отправлен экспертам. Ответ придет в личные сообщения.")
+    return  # Важно: завершаем обработку, чтобы не сработал эхо-обработчик
+
 # Эхо-обработчик для личных чатов (только суперпользователь, не команды)
 @bot.on.message(IsPrivateRule() & IsSuperuserRule())
 async def echo_handler(message):
@@ -769,6 +847,10 @@ def main():
     # Инициализация баз данных экспертов
     init_databases()
     logging.info("Базы данных экспертов инициализированы")
+    
+    # Инициализация базы данных вопросов
+    init_questions_db()
+    logging.info("База данных вопросов инициализирована")
     
     load_config()
     load_custom_commands()
