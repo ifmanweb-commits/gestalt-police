@@ -63,6 +63,24 @@ else
     echo "bot.log уже существует"
 fi
 
+# Создаём experts.json если не существует
+if [ ! -f experts.json ]; then
+    echo "Создание experts.json..."
+    echo '{}' > experts.json
+    echo "experts.json создан"
+else
+    echo "experts.json уже существует"
+fi
+
+# Создаём questions.json если не существует
+if [ ! -f questions.json ]; then
+    echo "Создание questions.json..."
+    echo '{}' > questions.json
+    echo "questions.json создан"
+else
+    echo "questions.json уже существует"
+fi
+
 # Проверяем .env
 if [ ! -f .env ]; then
     echo "ВНИМАНИЕ: Файл .env отсутствует!"

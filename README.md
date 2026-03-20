@@ -88,6 +88,8 @@ gestalt-police/
 | `config.json` | Настройки бота (admin_ids, allowed_chats, spam_keywords) |
 | `bot_database.json` | База данных пользователей и статистики |
 | `custom_commands.json` | Пользовательские команды |
+| `experts.json` | База данных экспертов |
+| `questions.json` | База данных вопросов и ответов экспертов |
 | `bot.log` | Лог-файл бота |
 | `.env` | Токен VK (не коммитить в репозиторий!) |
 

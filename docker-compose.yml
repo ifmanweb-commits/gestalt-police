@@ -8,6 +8,8 @@ services:
       - ./config.json:/app/config.json
       - ./custom_commands.json:/app/custom_commands.json
       - ./bot_database.json:/app/bot_database.json
+      - ./experts.json:/app/experts.json
+      - ./questions.json:/app/questions.json
       - ./bot.log:/app/bot.log
     env_file:
       - .env

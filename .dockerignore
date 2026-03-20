@@ -8,3 +8,5 @@ __pycache__/
 config.json
 bot_database.json
 custom_commands.json
+experts.json
+questions.json

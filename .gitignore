@@ -169,6 +169,8 @@ cython_debug/
 config.json
 bot_database.json
 custom_commands.json
+experts.json
+questions.json
 *.log
 
 # Deployment scripts (optional - can be committed)

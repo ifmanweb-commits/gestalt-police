@@ -14,6 +14,10 @@ from rules import (
     IsPrivateRule, IsGroupRule, IsSuperuserRule, IsNotSuperuserRule,
     CommandRule, StartsWithRule
 )
+from experts import (
+    init_databases, is_expert, add_expert, remove_expert,
+    get_expert_list, extract_user_id_from_url, resolve_user_id
+)
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -171,6 +175,9 @@ async def help_command(message):
 /ruleslist - Показать список всех сохраненных пользовательских команд
 /setrule $!команда$ $Текст сообщения$ - Создать новую или перезаписать существующую команду
 /delrule $!команда$ - Удалить существующую команду
+/expertreg <id|url> - Добавить эксперта (примеры: /expertreg 123456789, /expertreg https://vk.com/id123456789, /expertreg https://vk.com/username)
+/expertdel <id> - Удалить эксперта по ID (пример: /expertdel 123456789)
+/expertlist - Показать список всех экспертов
 /help - Показать справку
 """
     await message.answer(help_text)
@@ -412,6 +419,65 @@ async def delrule(message):
             await message.answer("Ошибка при работе с файлом команд.")
     else:
         await message.answer(f'Команда "{trigger}" не найдена.')
+
+# ============================================================================
+# КОМАНДЫ УПРАВЛЕНИЯ ЭКСПЕРТАМИ (только суперпользователь в личке)
+# ============================================================================
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertreg"))
+async def expertreg(message):
+    """Обработчик команды /expertreg - регистрация эксперта."""
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer('Добавьте ID пользователя или ссылку на профиль.\nПримеры:\n/expertreg 123456789\n/expertreg https://vk.com/id123456789\n/expertreg https://vk.com/username')
+        return
+    
+    identifier = args[1]
+    
+    # Определяем user_id через API
+    user_id = await resolve_user_id(api, identifier)
+    
+    if user_id is None:
+        await message.answer('Не удалось определить пользователя. Проверьте ID или ссылку.')
+        return
+    
+    # Добавляем эксперта
+    result = add_expert(user_id, identifier)
+    await message.answer(result['message'])
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertdel"))
+async def expertdel(message):
+    """Обработчик команды /expertdel - удаление эксперта."""
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer('Добавьте ID пользователя после команды.\nПример: /expertdel 123456789')
+        return
+    
+    try:
+        user_id = int(args[1])
+    except ValueError:
+        await message.answer('ID должен быть числом.')
+        return
+    
+    result = remove_expert(user_id)
+    await message.answer(result['message'])
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertlist"))
+async def expertlist(message):
+    """Обработчик команды /expertlist - список экспертов."""
+    experts = get_expert_list()
+    
+    if not experts:
+        await message.answer('Список экспертов пуст.')
+        return
+    
+    result = f"📋 **Список экспертов** ({len(experts)}):\n\n"
+    for expert in experts:
+        user_id = expert.get('user_id', 'Unknown')
+        url = expert.get('url', 'Unknown')
+        result += f"• {user_id} - {url}\n"
+    
+    await message.answer(result)
 
 # Эхо-обработчик для личных чатов (только суперпользователь, не команды)
 @bot.on.message(IsPrivateRule() & IsSuperuserRule())
@@ -699,6 +765,10 @@ async def perform_spam_check(message):
 
 def main():
     print("VK Bot is working")
+    
+    # Инициализация баз данных экспертов
+    init_databases()
+    logging.info("Базы данных экспертов инициализированы")
     
     load_config()
     load_custom_commands()
