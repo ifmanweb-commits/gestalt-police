@@ -21,10 +21,12 @@ load_dotenv()
 TOKEN = os.getenv('VK_TOKEN')
 
 # Настройка логирования
+LOG_DIR = "/app/logs"
+os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filename="bot.log",
+    filename=os.path.join(LOG_DIR, "bot.log"),
     filemode="a"
 )
 
