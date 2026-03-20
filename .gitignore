@@ -170,3 +170,8 @@ config.json
 bot_database.json
 custom_commands.json
 *.log
+
+# Deployment scripts (optional - can be committed)
+# Uncomment if you don't want to commit deployment scripts
+# init-files.sh
+# deploy.sh
