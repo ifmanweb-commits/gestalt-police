@@ -16,10 +16,11 @@ from rules import (
 )
 from experts import (
     init_databases, is_expert, add_expert, remove_expert,
-    get_expert_list, extract_user_id_from_url, resolve_user_id
+    get_expert_list, resolve_user_id
 )
 from questions import (
-    init_questions_db, add_question, format_question_for_experts
+    init_questions_db, add_question, format_question_for_experts,
+    get_question_by_id, add_expert_answer
 )
 
 # Загрузка переменных окружения
@@ -144,11 +145,8 @@ async def is_user_admin_in_chat(api: API, chat_id: int, user_id: int) -> bool:
     try:
         from rules import get_superuser_id
         superuser_id = get_superuser_id()
-        # В VK боты не имеют прямого доступа к статусу участника через API
-        # Проверяем только суперпользователя
         if user_id == superuser_id:
             return True
-        # Для других пользователей проверяем через базу зарегистрированных чатов
         user_data = db_main.get(User.user_id == user_id)
         if user_data and chat_id in user_data.get('chats', []):
             return True
@@ -167,7 +165,6 @@ bot = Bot(TOKEN)
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("start"))
 async def start(message):
-    """Обработчик команды /start."""
     await message.answer(
         'Здравствуйте! Я бот, удаляющий спам.\n\n'
         'Чтобы начать работу, добавьте меня в чат как администратора. '
@@ -180,7 +177,6 @@ async def start(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("help"))
 async def help_command(message):
-    """Обработчик команды /help."""
     help_text = """
 Команды:
 /start - Начать работу
@@ -192,8 +188,8 @@ async def help_command(message):
 /ruleslist - Показать список всех сохраненных пользовательских команд
 /setrule $!команда$ $Текст сообщения$ - Создать новую или перезаписать существующую команду
 /delrule $!команда$ - Удалить существующую команду
-/expertreg <id|url> - Добавить эксперта (примеры: /expertreg 123456789, /expertreg https://vk.com/id123456789, /expertreg https://vk.com/username)
-/expertdel <id> - Удалить эксперта по ID (пример: /expertdel 123456789)
+/expertreg <id|url> - Добавить эксперта
+/expertdel <id> - Удалить эксперта по ID
 /expertlist - Показать список всех экспертов
 /help - Показать справку
 """
@@ -201,7 +197,6 @@ async def help_command(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("register"))
 async def register(message):
-    """Обработчик команды /register."""
     args = message.text.split()
     if len(args) < 2:
         await message.answer('Добавьте идентификатор чата после команды.')
@@ -230,7 +225,6 @@ async def register(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("unregister"))
 async def unregister(message):
-    """Обработчик команды /unregister."""
     args = message.text.split()
     if len(args) < 2:
         await message.answer('Добавьте идентификатор чата после команды.')
@@ -256,7 +250,6 @@ async def unregister(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("list"))
 async def list_chats(message):
-    """Обработчик команды /list."""
     user_id = message.from_id
     user_data = db_main.get(User.user_id == user_id)
     
@@ -272,7 +265,6 @@ async def list_chats(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("delete_statuses"))
 async def delete_statuses(message):
-    """Обработчик команды /delete_statuses."""
     args = message.text.split()
     if len(args) < 2:
         await message.answer('Добавьте идентификатор чата после команды.')
@@ -298,7 +290,6 @@ async def delete_statuses(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("allow_statuses"))
 async def allow_statuses(message):
-    """Обработчик команды /allow_statuses."""
     args = message.text.split()
     if len(args) < 2:
         await message.answer('Добавьте идентификатор чата после команды.')
@@ -323,7 +314,6 @@ async def allow_statuses(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("ruleslist"))
 async def ruleslist(message):
-    """Обработчик команды /ruleslist."""
     if not is_user_admin_in_any_registered_chat(message.from_id):
         await message.answer(
             "У вас нет зарегистрированных чатов. "
@@ -346,7 +336,6 @@ async def ruleslist(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("setrule"))
 async def setrule(message):
-    """Обработчик команды /setrule."""
     if not is_user_admin_in_any_registered_chat(message.from_id):
         await message.answer(
             "У вас нет зарегистрированных чатов. "
@@ -356,8 +345,6 @@ async def setrule(message):
     
     message_text = message.text
     
-    # Парсинг аргументов с использованием $ как разделителя
-    # Паттерн: /setrule $trigger$ $response_text$
     pattern = r'/setrule\s+\$([^\$]+)\$\s+\$(.+?)\$$'
     match = re.match(pattern, message_text, re.DOTALL)
     
@@ -404,7 +391,6 @@ async def setrule(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("delrule"))
 async def delrule(message):
-    """Обработчик команды /delrule."""
     if not is_user_admin_in_any_registered_chat(message.from_id):
         await message.answer(
             "У вас нет зарегистрированных чатов. "
@@ -438,36 +424,31 @@ async def delrule(message):
         await message.answer(f'Команда "{trigger}" не найдена.')
 
 # ============================================================================
-# КОМАНДЫ УПРАВЛЕНИЯ ЭКСПЕРТАМИ (только суперпользователь в личке)
+# КОМАНДЫ УПРАВЛЕНИЯ ЭКСПЕРТАМИ
 # ============================================================================
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertreg"))
 async def expertreg(message):
-    """Обработчик команды /expertreg - регистрация эксперта."""
     args = message.text.split()
     if len(args) < 2:
-        await message.answer('Добавьте ID пользователя или ссылку на профиль.\nПримеры:\n/expertreg 123456789\n/expertreg https://vk.com/id123456789\n/expertreg https://vk.com/username')
+        await message.answer('Добавьте ID пользователя или ссылку на профиль.')
         return
     
     identifier = args[1]
-    
-    # Определяем user_id через API
     user_id = await resolve_user_id(api, identifier)
     
     if user_id is None:
-        await message.answer('Не удалось определить пользователя. Проверьте ID или ссылку.')
+        await message.answer('Не удалось определить пользователя.')
         return
     
-    # Добавляем эксперта
     result = add_expert(user_id, identifier)
     await message.answer(result['message'])
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertdel"))
 async def expertdel(message):
-    """Обработчик команды /expertdel - удаление эксперта."""
     args = message.text.split()
     if len(args) < 2:
-        await message.answer('Добавьте ID пользователя после команды.\nПример: /expertdel 123456789')
+        await message.answer('Добавьте ID пользователя после команды.')
         return
     
     try:
@@ -481,7 +462,6 @@ async def expertdel(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertlist"))
 async def expertlist(message):
-    """Обработчик команды /expertlist - список экспертов."""
     experts = get_expert_list()
     
     if not experts:
@@ -497,92 +477,145 @@ async def expertlist(message):
     await message.answer(result)
 
 # ============================================================================
-# ОБРАБОТКА ВОПРОСОВ ЭКСПЕРТАМ (#вопрос в личке сообщества)
+# ОБРАБОТКА ЛИЧНЫХ СООБЩЕНИЙ (для всех пользователей)
 # ============================================================================
 
 @bot.on.message(IsPrivateRule())
-async def handle_question(message):
+async def handle_private_message(message):
     """
-    Обработка сообщений, начинающихся с #вопрос.
-    Работает для всех пользователей в личных сообщениях сообщества.
+    Единый обработчик всех личных сообщений боту.
+    - Суперпользователь: эхо (для отладки)
+    - Обычные пользователи: только #вопрос
     """
-    text = message.text
-    if not text or not text.startswith('#вопрос'):
-        return
-    
-    # Отрезаем команду #вопрос от текста
-    question_text = text.replace('#вопрос', '', 1).strip()
-    
-    # Проверяем, что вопрос не пустой
-    if not question_text:
-        await message.answer("Вы неверно задали вопрос. Напишите #вопрос и дальше — развёрнутый текст вопроса одним большим сообщением.")
-        return
-    
-    # Получаем данные о пользователе
-    user_id = message.from_id
-    
-    # Получаем имя пользователя через API
-    try:
-        user_info = await api.users.get(user_ids=[user_id])
-        user_name = f"{user_info[0].first_name} {user_info[0].last_name}" if user_info else f"user{user_id}"
-    except Exception as e:
-        logging.error(f"Не удалось получить имя пользователя {user_id}: {e}")
-        user_name = f"user{user_id}"
-    
-    user_link = f"https://vk.com/id{user_id}"
-    
-    # Сохраняем вопрос в БД
-    question_id = add_question(user_id, user_name, question_text, user_link)
-    logging.info(f"Добавлен вопрос #{question_id} от пользователя {user_id}")
-    
-    # Отправляем вопрос экспертам в чат
-    if EXPERTS_CHAT_ID:
-        expert_message = format_question_for_experts({
-            "user_link": user_link,
-            "question_text": question_text
-        })
-        try:
-            await api.messages.send(
-                peer_id=EXPERTS_CHAT_ID,
-                message=expert_message,
-                random_id=random.randint(1, 2**31)
-            )
-            logging.info(f"Вопрос #{question_id} отправлен в чат экспертов {EXPERTS_CHAT_ID}")
-        except Exception as e:
-            logging.error(f"Ошибка при отправке вопроса экспертам: {e}")
-            await message.answer("❌ Произошла ошибка при отправке вопроса. Попробуйте позже.")
-            return
-    
-    # Ответ пользователю
-    await message.answer("✅ Ваш вопрос отправлен экспертам. Ответ придет в личные сообщения.")
-    return  # Важно: завершаем обработку, чтобы не сработал эхо-обработчик
-
-# Эхо-обработчик для личных чатов (только суперпользователь, не команды)
-@bot.on.message(IsPrivateRule() & IsSuperuserRule())
-async def echo_handler(message):
-    """Эхо-обработчик для личных чатов."""
     text = message.text
     if not text:
         return
     
-    # Игнорируем команды (начинающиеся с '/' или '!')
-    if text.startswith('/') or text.startswith('!'):
+    user_id = message.from_id
+    
+    # Суперпользователь: эхо (игнорируем команды)
+    if user_id == SUPERUSER_ID:
+        if text.startswith('/') or text.startswith('!'):
+            return
+        await message.answer(text)
         return
     
-    # Эхо-сообщение
-    await message.answer(text)
-
-# Обработчик для неавторизованных пользователей в личке
-@bot.on.message(IsPrivateRule() & IsNotSuperuserRule())
-async def unauthorized_handler(message):
-    """Обработчик для неавторизованных пользователей."""
-    await message.answer("Вы не авторизованный администратор.")
+    # Обычные пользователи: только #вопрос
+    if text.lower().startswith('#вопрос'):
+        question_text = text.replace('#вопрос', '', 1).strip()
+        
+        if not question_text:
+            await message.answer("❌ Вы не задали вопрос. Напишите: #вопрос Ваш вопрос")
+            return
+        
+        # Получаем имя пользователя
+        try:
+            user_info = await api.users.get(user_ids=[user_id])
+            user_name = f"{user_info[0].first_name} {user_info[0].last_name}" if user_info else f"user{user_id}"
+        except:
+            user_name = f"user{user_id}"
+        
+        user_link = f"https://vk.com/id{user_id}"
+        
+        # Сохраняем в БД
+        question_id = add_question(user_id, user_name, question_text, user_link)
+        logging.info(f"Вопрос #{question_id} от {user_name} ({user_id})")
+        
+        # Отправляем экспертам
+        if EXPERTS_CHAT_ID:
+            expert_message = format_question_for_experts({
+                "user_link": user_link,
+                "question_text": question_text
+            })
+            try:
+                await api.messages.send(
+                    peer_id=EXPERTS_CHAT_ID,
+                    message=expert_message,
+                    random_id=random.randint(1, 2**31)
+                )
+                logging.info(f"Вопрос #{question_id} отправлен экспертам")
+            except Exception as e:
+                logging.error(f"Ошибка отправки экспертам: {e}")
+                await message.answer("❌ Ошибка при отправке вопроса. Попробуйте позже.")
+                return
+        
+        await message.answer("✅ Ваш вопрос отправлен экспертам. Ответ придет в личные сообщения.")
+        return
+    
+    # Всё остальное — отказ
+    await message.answer(
+        "📝 Этот бот принимает только вопросы экспертам.\n\n"
+        "Чтобы задать вопрос, напишите:\n"
+        "#вопрос Ваш текст вопроса\n\n"
+        "Пример:\n"
+        "#вопрос Как справиться с тревогой?"
+    )
 
 # ============================================================================
-# ГРУППОВЫЕ ЧАТЫ
+# ОБРАБОТКА ОТВЕТОВ ЭКСПЕРТОВ В БЕСЕДЕ ЭКСПЕРТОВ
 # ============================================================================
 
-# !команды в групповых чатах (обработка команд с пробелами)
+@bot.on.message(IsGroupRule())
+async def handle_expert_answer(message):
+    """
+    Обработка ответов экспертов в беседе экспертов.
+    Эксперт отвечает на сообщение бота → бот отправляет ответ пользователю.
+    """
+    if message.peer_id != EXPERTS_CHAT_ID:
+        return
+    
+    # Проверяем, что это ответ на сообщение
+    if not message.reply_message:
+        return
+    
+    reply_to = message.reply_message
+    
+    # Проверяем, что исходное сообщение отправлено ботом
+    if reply_to.from_id >= 0:
+        return
+    
+    # Извлекаем user_id из текста исходного сообщения
+    import re
+    match = re.search(r'https://vk\.com/id(\d+)', reply_to.text)
+    if not match:
+        logging.warning(f"Не удалось извлечь user_id из сообщения: {reply_to.text}")
+        return
+    
+    target_user_id = int(match.group(1))
+    
+    # Получаем имя эксперта
+    expert_id = message.from_id
+    try:
+        user_info = await api.users.get(user_ids=[expert_id])
+        expert_name = f"{user_info[0].first_name} {user_info[0].last_name}" if user_info else f"Эксперт {expert_id}"
+    except:
+        expert_name = f"Эксперт {expert_id}"
+    
+    expert_link = f"https://vk.com/id{expert_id}"
+    
+    # Отправляем ответ пользователю
+    try:
+        await api.messages.send(
+            peer_id=target_user_id,
+            message=f"📩 **Ответ эксперта {expert_name}:**\n\n{message.text}",
+            random_id=random.randint(1, 2**31)
+        )
+        logging.info(f"Ответ отправлен пользователю {target_user_id}")
+        
+        # Дополнительно уведомляем эксперта об отправке
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message=f"✅ Ответ отправлен пользователю https://vk.com/id{target_user_id}",
+            reply_to=message.conversation_message_id,
+            random_id=random.randint(1, 2**31)
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при отправке ответа пользователю: {e}")
+
+# ============================================================================
+# ГРУППОВЫЕ ЧАТЫ: !команды и антиспам
+# ============================================================================
+
 @bot.on.message(IsGroupRule() & StartsWithRule("!"))
 async def custom_command_handler(message):
     """Обработчик !команд в групповых чатах."""
@@ -590,22 +623,15 @@ async def custom_command_handler(message):
     if not text:
         return
     
-    # Игнорируем сообщения от других ботов
     if message.from_id < 0:
         return
     
-    # Проверяем, является ли отправитель администратором
     is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
     if not is_admin:
         logging.info(f"Пользователь {message.from_id} не является администратором в чате {message.peer_id}")
         return
     
-    # Ищем команду - первое слово или фраза до конца
-    # Команда может содержать пробелы, например "!ссылка правила"
-    # Проверяем все возможные команды от длинных к коротким
     words = text.split()
-    
-    # Собираем возможные команды (от полного текста до первого слова)
     possible_commands = []
     for i in range(len(words), 0, -1):
         possible_cmd = ' '.join(words[:i])
@@ -615,26 +641,18 @@ async def custom_command_handler(message):
     if not possible_commands:
         return
     
-    # Используем самую длинную совпавшую команду
     cmd_text = possible_commands[0]
     
-    logging.info(f"Обработка команды {cmd_text} от пользователя {message.from_id} в чате {message.peer_id}")
-    logging.info(f"Попытка удаления: peer_id={message.peer_id}, conversation_message_id={message.conversation_message_id}, from_id={message.from_id}")
-    
-    # Удаляем сообщение с командой
     try:
-        logging.info(f"Удаление сообщения {message.conversation_message_id} в чате {message.peer_id}")
-        result = await api.messages.delete(
+        await api.messages.delete(
             peer_id=message.peer_id,
             conversation_message_ids=[message.conversation_message_id]
         )
-        logging.info(f"Результат удаления: {result}")
     except Exception as e:
-        logging.error(f"Ошибка при удалении: {type(e).__name__}: {e}")
+        logging.error(f"Ошибка при удалении: {e}")
     
     response_text = custom_commands[cmd_text]
     
-    # Отправляем ответ
     try:
         if message.reply_message:
             await api.messages.send(
@@ -653,24 +671,19 @@ async def custom_command_handler(message):
     except Exception as e:
         logging.error(f"Ошибка при отправке ответа на команду {cmd_text}: {e}")
 
-# Антиспам (только групповые чаты)
 @bot.on.message(IsGroupRule())
 async def antispam_handler(message):
-    """Обработчик новых сообщений для антиспам-проверки."""
-    # Если это !команда от админа, пропускаем
+    """Антиспам проверка."""
     if message.text and message.text.startswith('!'):
-        if message.from_id >= 0:  # Не бот
+        if message.from_id >= 0:
             is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
             if is_admin:
-                return  # Админские команды не проверяем на спам
-    
+                return
     await perform_spam_check(message)
 
-# Системные сообщения (удаляем все автоматически)
 @bot.on.message(IsGroupRule())
 async def status_handler(message):
-    """Обработчик системных сообщений."""
-    # Проверяем, зарегистрирован ли этот чат
+    """Удаление системных сообщений."""
     registered_users = db_main.search(User.chats.any([message.peer_id]))
     
     for user_data in registered_users:
@@ -686,7 +699,6 @@ async def status_handler(message):
 # АНТИСПАМ ЛОГИКА
 # ============================================================================
 
-# Паттерны для рекламы ботов
 BOT_AD_PATTERNS = [
     r'@\w*bot',
     r't\.me/\w*bot',
@@ -694,25 +706,21 @@ BOT_AD_PATTERNS = [
 ]
 
 def has_bot_advertisement(text: str) -> bool:
-    """Проверяет, содержит ли текст рекламу ботов."""
     for pattern in BOT_AD_PATTERNS:
         if re.search(pattern, text, re.IGNORECASE):
             return True
     return False
 
 async def perform_spam_check(message):
-    """Выполняет проверку сообщения на спам."""
     if not message.text and not message.attachments:
         return
     
     chat_id = message.peer_id
     from_user = message.from_id
     
-    # Игнорируем сообщения от ботов
     if from_user < 0:
         return
     
-    # Игнорируем сообщения от администраторов
     is_admin = await is_user_admin_in_chat(api, chat_id, from_user)
     if is_admin:
         return
@@ -721,37 +729,24 @@ async def perform_spam_check(message):
     if not text:
         return
     
-    # Проверка на критический спам
     crit_tokens = has_critical_patterns(text)
     crit_tokens_bool = crit_tokens is not None
     crit_tokens_string = crit_tokens.group() if crit_tokens else None
     
-    # Проверка на обычный спам
     spam_tokens = new_is_spam_message(text)
     spam_tokens_bool = spam_tokens is not None
     
-    # Проверка на смешанные слова
     mixed_words = has_mixed_words(text)
     num_mixed = len(mixed_words)
     
-    # Проверка на эмодзи
     emoji_num = sum(1 for _ in emoji.emoji_list(text))
     emoji_critical_num = emoji_num > 12
     
-    # Проверка на рекламу ботов
     is_bot_ad = has_bot_advertisement(text)
     
-    is_critical = (
-        crit_tokens_bool or
-        num_mixed > 1 or
-        emoji_critical_num
-    )
+    is_critical = (crit_tokens_bool or num_mixed > 1 or emoji_critical_num)
+    is_regular_spam = (spam_tokens_bool and not crit_tokens_bool)
     
-    is_regular_spam = (
-        spam_tokens_bool and not crit_tokens_bool
-    )
-    
-    # Бан за критический спам
     if (len(text) < 500) and is_critical:
         verdict = f"""
 <b>Критические токены:</b> {crit_tokens_bool} | {crit_tokens_string}
@@ -761,7 +756,6 @@ async def perform_spam_check(message):
         
         user_link = f"vk.com/id{from_user}"
         user_display_name = f"user{from_user}"
-        
         message_text = text[:500]
         text_message_content = (
             f"🎯 <b>Автоматический бан:</b>\n\n"
@@ -770,17 +764,13 @@ async def perform_spam_check(message):
         )
         
         try:
-            # Удаляем сообщение
             await api.messages.delete(peer_id=chat_id, conversation_message_ids=[message.conversation_message_id])
-            
-            # В VK нет прямого бана через бота, но можно удалить пользователя из беседы
-            if chat_id > 2000000000:  # Беседа
+            if chat_id > 2000000000:
                 try:
                     await api.messages.remove_chat_user(chat_id=chat_id, user_id=from_user)
                 except Exception as ban_error:
                     logging.warning(f"Не удалось удалить пользователя из беседы: {ban_error}")
             
-            # Уведомляем зарегистрированных пользователей
             for user in db_main.all():
                 if chat_id in user['chats']:
                     try:
@@ -793,7 +783,6 @@ async def perform_spam_check(message):
                     except Exception as e:
                         logging.error(f"Ошибка при отправке уведомления: {e}")
             return
-            
         except Exception as e:
             error_message = f"Возникла ошибка при автоматическом бане: {str(e)}\n\n{verdict}"
             for user in db_main.all():
@@ -808,7 +797,6 @@ async def perform_spam_check(message):
                         logging.error(f"Ошибка при отправке уведомления об ошибке: {e}")
             return
     
-    # Удаление за обычный спам или рекламу ботов
     elif (len(text) < 500) and (is_regular_spam or is_bot_ad):
         verdict = f"""
 <b>Обычный спам:</b> {spam_tokens_bool}
@@ -837,18 +825,15 @@ async def perform_spam_check(message):
                         )
                     except Exception as e:
                         logging.error(f"Ошибка при отправке уведомления об удалении: {e}")
-                        
         except Exception as e:
             logging.error(f"Ошибка при удалении спам-сообщения: {e}")
 
 def main():
     print("VK Bot is working")
     
-    # Инициализация баз данных экспертов
     init_databases()
     logging.info("Базы данных экспертов инициализированы")
     
-    # Инициализация базы данных вопросов
     init_questions_db()
     logging.info("База данных вопросов инициализирована")
     
