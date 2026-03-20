@@ -1,15 +1,11 @@
 """
-Модуль управления вопросами для VK бота.
-Использует TinyDB для хранения данных.
+Модуль для работы с базой данных вопросов.
 """
-
 import os
 import json
 from datetime import datetime
-from tinydb import TinyDB
-
-# Пути к файлам баз данных
-QUESTIONS_FILE = "./questions.json"
+from tinydb import Query
+from database import get_questions_db
 
 
 def init_questions_db():
@@ -18,22 +14,12 @@ def init_questions_db():
     Создаёт пустой файл questions.json если он не существует.
     TinyDB сама управляет внутренней структурой.
     """
-    if not os.path.exists(QUESTIONS_FILE):
-        with open(QUESTIONS_FILE, "w", encoding="utf-8") as f:
+    if not os.path.exists("./questions.json"):
+        with open("./questions.json", "w", encoding="utf-8") as f:
             f.write("{}")
 
 
-def get_questions_db():
-    """
-    Возвращает экземпляр TinyDB для вопросов.
-    
-    Returns:
-        TinyDB: Экземпляр базы данных вопросов
-    """
-    return TinyDB(QUESTIONS_FILE)
-
-
-def get_next_question_id():
+def get_next_question_id() -> int:
     """
     Возвращает следующий ID для вопроса (автоинкремент).
     
@@ -97,8 +83,10 @@ def format_question_for_experts(question_data: dict) -> str:
     """
     user_link = question_data.get('user_link', '')
     question_text = question_data.get('question_text', '')
+    question_id = question_data.get('question_id', '')
     
-    return f"Вопрос от {user_link}\n\n{question_text}"
+    # Добавляем question_id в конец сообщения для последующего извлечения
+    return f"Вопрос от {user_link}\n\n{question_text}\n\n---\nQID:{question_id}"
 
 
 def get_question_by_id(question_id: int) -> dict:
@@ -112,7 +100,6 @@ def get_question_by_id(question_id: int) -> dict:
         dict: Данные вопроса или None если не найден
     """
     db = get_questions_db()
-    from tinydb import Query
     Question = Query()
     return db.get(Question.id == question_id)
 
@@ -133,7 +120,6 @@ def add_expert_answer(question_id: int, expert_id: int, expert_name: str,
         bool: True если ответ успешно добавлен
     """
     db = get_questions_db()
-    from tinydb import Query
     Question = Query()
     
     question = db.get(Question.id == question_id)

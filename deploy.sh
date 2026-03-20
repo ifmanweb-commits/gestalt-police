@@ -1,43 +1,29 @@
 #!/bin/bash
-# Скрипт деплоя для gestalt-police бота
+
+# Скрипт развертывания VK бота через Docker
 # Использование: ./deploy.sh
 
 set -e
 
-echo "================================"
-echo "  gestalt-police: Деплой"
-echo "================================"
-echo ""
+echo "🚀 Начало развертывания VK бота..."
 
-# Обновляем код из репозитория
-echo "📥 Обновление кода из репозитория..."
-git pull origin main || git pull origin master
-echo ""
+# Останавливаем текущий контейнер (если есть)
+echo "⏹️  Остановка текущего контейнера..."
+docker-compose down || true
 
-# Инициализируем файлы если нужно
-if [ -f init-files.sh ]; then
-    echo "📋 Проверка и инициализация файлов..."
-    chmod +x init-files.sh
-    ./init-files.sh
-    echo ""
-fi
+# Собираем новый образ
+echo "🔨 Сборка Docker образа..."
+docker-compose build --no-cache
 
-# Собираем и запускаем контейнер
-echo "🐳 Сборка Docker образа..."
-docker compose build --no-cache
+# Запускаем контейнер
+echo "▶️  Запуск контейнера..."
+docker-compose up -d
+
+# Показываем логи
+echo "📋 Логи контейнера (последние 50 строк):"
+docker-compose logs --tail=50
 
 echo ""
-echo "🚀 Запуск контейнера..."
-docker compose up -d
-
-echo ""
-echo "================================"
-echo "  Деплой завершён!"
-echo "================================"
-echo ""
-echo "Статус контейнера:"
-docker compose ps
-
-echo ""
-echo "Логи (последние 20 строк):"
-docker compose logs --tail=20
+echo "✅ Развертывание завершено!"
+echo "📊 Статус контейнера:"
+docker-compose ps

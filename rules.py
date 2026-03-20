@@ -2,6 +2,9 @@ from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import ABCRule
 import json
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 CONFIG_FILE = "./config.json"
 
@@ -11,31 +14,37 @@ def get_superuser_id() -> int:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
-                return config.get('superuser_id')
-    except Exception:
-        pass
+                superuser_id = config.get('superuser_id')
+                logger.info(f"get_superuser_id: загружено superuser_id={superuser_id} из {CONFIG_FILE}")
+                return superuser_id
+    except Exception as e:
+        logger.error(f"get_superuser_id: ошибка чтения config.json: {e}")
     return None
 
 
 class IsPrivateRule(ABCRule[Message]):
     """Проверяет, что сообщение в личном чате"""
     async def check(self, message: Message) -> bool:
-        return message.peer_id == message.from_id
+        result = message.peer_id == message.from_id
+        logger.debug(f"IsPrivateRule: peer_id={message.peer_id}, from_id={message.from_id}, result={result}")
+        return result
 
 
 class IsGroupRule(ABCRule[Message]):
     """Проверяет, что сообщение в групповом чате (беседе)"""
     async def check(self, message: Message) -> bool:
-        return message.peer_id != message.from_id
+        result = message.peer_id != message.from_id
+        logger.debug(f"IsGroupRule: peer_id={message.peer_id}, from_id={message.from_id}, result={result}")
+        return result
 
 
 class IsSuperuserRule(ABCRule[Message]):
     """Проверяет, что отправитель - суперпользователь"""
     async def check(self, message: Message) -> bool:
         superuser_id = get_superuser_id()
-        if superuser_id is None:
-            return False
-        return message.from_id == superuser_id
+        result = message.from_id == superuser_id if superuser_id is not None else False
+        logger.info(f"IsSuperuserRule: from_id={message.from_id}, superuser_id={superuser_id}, result={result}")
+        return result
 
 
 class IsNotSuperuserRule(ABCRule[Message]):

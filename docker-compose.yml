@@ -5,12 +5,14 @@ services:
     build: .
     container_name: gestalt-police-bot
     volumes:
+      # Монтируем файлы данных для сохранения состояния между перезапусками
       - ./config.json:/app/config.json
       - ./custom_commands.json:/app/custom_commands.json
       - ./bot_database.json:/app/bot_database.json
       - ./experts.json:/app/experts.json
       - ./questions.json:/app/questions.json
-      - ./bot.log:/app/bot.log
+      # Монтируем директорию для логов
+      - ./logs:/app/logs
     env_file:
       - .env
     restart: unless-stopped

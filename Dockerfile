@@ -1,6 +1,6 @@
-FROM python:3.14-slim
+FROM python:3.10-slim
 
-# Установка build-essential для компиляции C-расширений
+# Установка системных зависимостей
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -8,14 +8,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Настройка зеркал PyPI для стабильной загрузки
-RUN pip config set global.index-url https://mirrors.cloud.tencent.com/pypi/simple/ && \
-    pip config set global.trusted-host mirrors.cloud.tencent.com && \
-    pip config set global.timeout 120
-
+# Копируем requirements.txt и устанавливаем зависимости
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Копируем весь код проекта
 COPY . .
 
+# Создаем директорию для логов
+RUN mkdir -p /app/logs
+
+# Запуск бота
 CMD ["python", "vk_bot.py"]

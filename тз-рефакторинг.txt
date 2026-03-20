@@ -1,0 +1,425 @@
+Отличный вопрос. Бот действительно разросся. Вот как можно структурировать проект.
+
+## 📁 Предлагаемая структура
+
+```
+gestalt-police/
+├── bot/
+│   ├── __init__.py
+│   ├── main.py                 # Точка входа, инициализация
+│   ├── config.py               # Загрузка конфигов
+│   ├── database.py             # Общие функции для TinyDB
+│   ├── handlers/
+│   │   ├── __init__.py
+│   │   ├── private.py          # Личка: команды, #вопрос, эхо
+│   │   ├── group.py            # Групповые чаты: !команды, антиспам
+│   │   ├── experts.py          # Беседа экспертов: ответы
+│   │   └── admin.py            # Админ-команды (/register, /expertreg...)
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── experts_db.py       # Работа с experts.json
+│   │   └── questions_db.py     # Работа с questions.json
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── spam_check.py       # Логика антиспама
+│   │   ├── vk_api.py           # Обёртки для API (resolve_user_id и т.д.)
+│   │   └── custom_commands.py  # Загрузка/сохранение !команд
+│   └── rules.py                # Фильтры (IsPrivateRule и т.д.)
+├── config.json
+├── .env
+├── requirements.txt
+└── Dockerfile
+```
+
+## 📝 Код основных модулей
+
+### `bot/config.py`
+```python
+import json
+import logging
+
+CONFIG_FILE = "./config.json"
+
+SUPERUSER_ID = None
+EXPERTS_CHAT_ID = None
+GROUP_ID = None
+
+def load_config():
+    global SUPERUSER_ID, EXPERTS_CHAT_ID, GROUP_ID
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+            SUPERUSER_ID = config.get('superuser_id')
+            EXPERTS_CHAT_ID = config.get('experts_chat_id')
+            GROUP_ID = config.get('group_id')
+    except Exception as e:
+        logging.error(f"Ошибка загрузки config: {e}")
+```
+
+### `bot/database.py`
+```python
+from tinydb import TinyDB, Query
+
+def get_db(file_path: str) -> TinyDB:
+    """Возвращает экземпляр TinyDB для указанного файла"""
+    return TinyDB(file_path)
+
+# Предопределённые таблицы
+experts_db = lambda: TinyDB("./experts.json")
+questions_db = lambda: TinyDB("./questions.json")
+bot_db = lambda: TinyDB("./bot_database.json")
+```
+
+### `bot/models/experts_db.py`
+```python
+from bot.database import get_db
+from tinydb import Query
+
+EXPERTS_FILE = "./experts.json"
+
+def get_experts_db():
+    return get_db(EXPERTS_FILE)
+
+def is_expert(user_id: int) -> bool:
+    db = get_experts_db()
+    Expert = Query()
+    return db.get(Expert.user_id == user_id) is not None
+
+def add_expert(user_id: int, url: str) -> dict:
+    db = get_experts_db()
+    Expert = Query()
+    
+    if db.get(Expert.user_id == user_id):
+        return {'success': False, 'message': f'Эксперт {user_id} уже есть'}
+    
+    db.insert({'user_id': user_id, 'url': url})
+    return {'success': True, 'message': f'Эксперт {user_id} добавлен'}
+
+def remove_expert(user_id: int) -> dict:
+    db = get_experts_db()
+    Expert = Query()
+    
+    if not db.get(Expert.user_id == user_id):
+        return {'success': False, 'message': f'Эксперт {user_id} не найден'}
+    
+    db.remove(Expert.user_id == user_id)
+    return {'success': True, 'message': f'Эксперт {user_id} удалён'}
+
+def get_all_experts() -> list:
+    return get_experts_db().all()
+```
+
+### `bot/handlers/private.py`
+```python
+import logging
+import random
+from vkbottle.bot import Message
+from vkbottle import API
+
+from bot.rules import IsPrivateRule, IsSuperuserRule, CommandRule
+from bot.config import SUPERUSER_ID, EXPERTS_CHAT_ID
+from bot.models.questions_db import add_question
+from bot.services.vk_api import get_user_name
+
+async def handle_question(message: Message, api: API):
+    """Обработка #вопрос"""
+    text = message.text
+    if not text or not text.lower().startswith('#вопрос'):
+        return
+    
+    question_text = text.replace('#вопрос', '', 1).strip()
+    if not question_text:
+        await message.answer("❌ Напишите: #вопрос Ваш вопрос")
+        return
+    
+    user_id = message.from_id
+    user_name = await get_user_name(api, user_id)
+    user_link = f"https://vk.com/id{user_id}"
+    
+    question_id = add_question(user_id, user_name, question_text, user_link)
+    
+    if EXPERTS_CHAT_ID:
+        await api.messages.send(
+            peer_id=EXPERTS_CHAT_ID,
+            message=f"Вопрос от {user_link}\n\n{question_text}",
+            random_id=random.randint(1, 2**31)
+        )
+    
+    await message.answer("✅ Вопрос отправлен экспертам")
+    return True  # Сообщение обработано
+
+async def handle_superuser_echo(message: Message):
+    """Эхо для суперпользователя"""
+    text = message.text
+    if text and not text.startswith(('/', '!')):
+        await message.answer(text)
+    return True
+
+async def handle_unauthorized(message: Message):
+    """Отказ обычным пользователям"""
+    await message.answer(
+        "📝 Этот бот принимает только вопросы экспертам.\n"
+        "Напишите: #вопрос Ваш текст вопроса"
+    )
+    return True
+```
+
+### `bot/handlers/group.py`
+```python
+import logging
+import random
+from vkbottle.bot import Message
+from vkbottle import API
+
+from bot.rules import IsGroupRule
+from bot.config import EXPERTS_CHAT_ID
+from bot.services.custom_commands import get_command_response, is_admin_command
+from bot.services.spam_check import perform_spam_check
+
+async def handle_expert_answer(message: Message, api: API):
+    """Ответ эксперта → пересылка пользователю"""
+    if message.peer_id != EXPERTS_CHAT_ID:
+        return
+    
+    if not message.reply_message:
+        return
+    
+    reply_to = message.reply_message
+    if reply_to.from_id >= 0:
+        return
+    
+    import re
+    match = re.search(r'https://vk\.com/id(\d+)', reply_to.text)
+    if not match:
+        return
+    
+    target_user_id = int(match.group(1))
+    
+    # Получаем имя эксперта
+    expert_info = await api.users.get(user_ids=[message.from_id])
+    expert_name = f"{expert_info[0].first_name} {expert_info[0].last_name}"
+    
+    await api.messages.send(
+        peer_id=target_user_id,
+        message=f"📩 Ответ эксперта {expert_name}:\n\n{message.text}",
+        random_id=random.randint(1, 2**31)
+    )
+    
+    await api.messages.send(
+        peer_id=message.peer_id,
+        message=f"✅ Ответ отправлен",
+        reply_to=message.conversation_message_id,
+        random_id=random.randint(1, 2**31)
+    )
+    return True
+
+async def handle_custom_command(message: Message, api: API):
+    """!команды в групповых чатах"""
+    text = message.text
+    if not text or not text.startswith('!'):
+        return
+    
+    # Проверка админа (упрощённо)
+    from bot.handlers.admin import is_chat_admin
+    if not await is_chat_admin(api, message.peer_id, message.from_id):
+        return
+    
+    response = get_command_response(text)
+    if response:
+        # Удаляем команду
+        try:
+            await api.messages.delete(
+                peer_id=message.peer_id,
+                conversation_message_ids=[message.conversation_message_id]
+            )
+        except:
+            pass
+        
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message=response,
+            random_id=random.randint(1, 2**31)
+        )
+        return True
+
+async def handle_antispam(message: Message, api: API):
+    """Антиспам проверка"""
+    # Пропускаем админские команды
+    if message.text and message.text.startswith('!'):
+        from bot.handlers.admin import is_chat_admin
+        if await is_chat_admin(api, message.peer_id, message.from_id):
+            return
+    
+    await perform_spam_check(message, api)
+    return True
+```
+
+### `bot/handlers/admin.py`
+```python
+import logging
+import random
+from vkbottle.bot import Message
+from vkbottle import API
+
+from bot.rules import IsPrivateRule, IsSuperuserRule, CommandRule
+from bot.config import SUPERUSER_ID
+from bot.database import bot_db
+from bot.models.experts_db import add_expert, remove_expert, get_all_experts
+from bot.services.vk_api import resolve_user_id
+
+# Регистрация бесед
+async def register_chat(message: Message, db):
+    """/register <chat_id>"""
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer('Укажите ID чата')
+        return
+    
+    try:
+        chat_id = int(args[1])
+    except ValueError:
+        await message.answer('ID должен быть числом')
+        return
+    
+    user_data = db.get(User.user_id == message.from_id)
+    if user_data:
+        if chat_id not in user_data['chats']:
+            user_data['chats'].append(chat_id)
+            db.update(user_data, User.user_id == message.from_id)
+    else:
+        db.insert({'user_id': message.from_id, 'chats': [chat_id]})
+    
+    await message.answer(f'Чат {chat_id} зарегистрирован')
+
+async def expert_reg(message: Message, api: API):
+    """/expertreg <id|url>"""
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer('Укажите ID или ссылку')
+        return
+    
+    user_id = await resolve_user_id(api, args[1])
+    if not user_id:
+        await message.answer('Не удалось определить пользователя')
+        return
+    
+    result = add_expert(user_id, args[1])
+    await message.answer(result['message'])
+
+async def expert_list(message: Message):
+    """/expertlist"""
+    experts = get_all_experts()
+    if not experts:
+        await message.answer('Список экспертов пуст')
+        return
+    
+    text = f"📋 Эксперты ({len(experts)}):\n"
+    for e in experts:
+        text += f"• {e['user_id']} - {e.get('url', '')}\n"
+    await message.answer(text)
+```
+
+### `bot/main.py` (главный файл)
+```python
+import logging
+import os
+from dotenv import load_dotenv
+from vkbottle import API, Bot
+
+from bot.config import load_config
+from bot.rules import IsPrivateRule, IsGroupRule, IsSuperuserRule, CommandRule
+
+# Импорт обработчиков
+from bot.handlers.private import handle_question, handle_superuser_echo, handle_unauthorized
+from bot.handlers.group import handle_expert_answer, handle_custom_command, handle_antispam
+from bot.handlers.admin import register_chat, unregister_chat, list_chats
+from bot.handlers.admin import expert_reg, expert_del, expert_list
+from bot.handlers.admin import delete_statuses, allow_statuses, setrule, delrule, ruleslist
+
+# Инициализация
+load_dotenv()
+TOKEN = os.getenv('VK_TOKEN')
+api = API(TOKEN)
+bot = Bot(TOKEN)
+
+# Загрузка конфига
+load_config()
+
+# ============================================================================
+# Регистрация обработчиков
+# ============================================================================
+
+# 1. Команды суперпользователя в личке
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("start"))
+async def start(message): ...
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("help"))
+async def help(message): ...
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("register"))
+async def register(message): await register_chat(message, db_main)
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("unregister"))
+async def unregister(message): await unregister_chat(message, db_main)
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("list"))
+async def list(message): await list_chats(message, db_main)
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertreg"))
+async def expertreg(message): await expert_reg(message, api)
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertdel"))
+async def expertdel(message): await expert_del(message)
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertlist"))
+async def expertlist(message): await expert_list(message)
+
+# 2. Личные сообщения (все пользователи)
+@bot.on.message(IsPrivateRule())
+async def private_handler(message):
+    # Порядок важен!
+    if await handle_question(message, api):
+        return
+    if message.from_id == SUPERUSER_ID:
+        await handle_superuser_echo(message)
+    else:
+        await handle_unauthorized(message)
+
+# 3. Групповые сообщения
+@bot.on.message(IsGroupRule())
+async def group_handler(message):
+    if await handle_expert_answer(message, api):
+        return
+    if await handle_custom_command(message, api):
+        return
+    await handle_antispam(message, api)
+
+# ============================================================================
+# Запуск
+# ============================================================================
+
+def main():
+    print("VK Bot is working")
+    bot.run_forever()
+
+if __name__ == '__main__':
+    main()
+```
+
+## 🎯 Преимущества
+
+| Проблема | Решение |
+|----------|---------|
+| Огромный файл | Разбит на модули по 50–150 строк |
+| Сложно найти логику | Каждый обработчик в своём модуле |
+| Трудно тестировать | Модули можно тестировать отдельно |
+| Конфликты обработчиков | Единый обработчик с чётким порядком |
+
+## 🚀 Следующие шаги
+
+1. Создать структуру папок
+2. Перенести код по модулям
+3. Проверить импорты
+4. Запушить и протестировать
+
+Хочешь, помогу с переносом конкретных кусков?

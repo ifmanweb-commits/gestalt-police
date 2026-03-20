@@ -173,6 +173,9 @@ experts.json
 questions.json
 *.log
 
+# Logs directory
+logs/
+
 # Deployment scripts (optional - can be committed)
 # Uncomment if you don't want to commit deployment scripts
 # init-files.sh
