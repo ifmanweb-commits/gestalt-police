@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.git
+.gitignore
+*.log
+.env
+config.json
+bot_database.json
+custom_commands.json

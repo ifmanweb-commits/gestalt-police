@@ -1,0 +1,148 @@
+﻿# Техническое задание: Исправление обработчиков сообщений VK бота
+
+## Цель
+Исправить проблему с обработкой сообщений в VK боте — сейчас бот не отвечает в личных сообщениях, потому что все обработчики конфликтуют между собой.
+
+## Текущая проблема
+В файле `vk_bot.py` все обработчики используют декоратор `@bot.on.message()` без фильтров. Они выполняются по очереди, и каждый пытается обработать сообщение. Из-за этого сообщения "съедаются" первым попавшимся обработчиком, который не находит свою команду, но и не передаёт управление дальше.
+
+## Требуемые изменения
+
+### 1. Создать файл с правилами-фильтрами
+Создать новый файл `rules.py` со следующими классами:
+
+```python
+from vkbottle.bot import Message
+from vkbottle.dispatch.rules.base import ABCRule
+
+class IsPrivateRule(ABCRule[Message]):
+    """Проверяет, что сообщение в личном чате"""
+    async def check(self, message: Message) -> bool:
+        return message.peer_id == message.from_id
+
+class IsGroupRule(ABCRule[Message]):
+    """Проверяет, что сообщение в групповом чате (беседе)"""
+    async def check(self, message: Message) -> bool:
+        return message.peer_id != message.from_id
+
+class IsSuperuserRule(ABCRule[Message]):
+    """Проверяет, что отправитель - суперпользователь"""
+    async def check(self, message: Message) -> bool:
+        # Загружаем ID из конфига
+        from config import SUPERUSER_ID
+        return message.from_id == SUPERUSER_ID
+
+class CommandRule(ABCRule[Message]):
+    """Проверяет, что сообщение начинается с указанной команды"""
+    def __init__(self, command: str):
+        self.command = command
+    
+    async def check(self, message: Message) -> bool:
+        if not message.text:
+            return False
+        text = message.text.strip()
+        # Проверяем /команду или !команду
+        return text.split()[0].lower() in [f"/{self.command}", f"!{self.command}"]
+```
+
+### 2. Изменить основной файл `vk_bot.py`
+
+#### 2.1 Добавить импорты в начало файла
+```python
+from rules import IsPrivateRule, IsGroupRule, IsSuperuserRule, CommandRule
+```
+
+#### 2.2 Заменить все существующие декораторы `@bot.on.message()` на декораторы с фильтрами
+
+**Для команд, работающих только в личке с суперпользователем:**
+- `/start`
+- `/help`
+- `/register`
+- `/unregister`
+- `/list`
+- `/delete_statuses`
+- `/allow_statuses`
+- `/ruleslist`
+- `/setrule`
+- `/delrule`
+
+Пример:
+```python
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("start"))
+async def start(message):
+    # код команды
+```
+
+**Для эхо-обработчика (личка, суперпользователь, не команды):**
+```python
+@bot.on.message(IsPrivateRule() & IsSuperuserRule())
+async def echo_handler(message):
+    # Проверяем, что это не команда
+    if message.text and (message.text.startswith('/') or message.text.startswith('!')):
+        return
+    await message.answer(message.text)
+```
+
+**Для антиспама (только групповые чаты):**
+```python
+@bot.on.message(IsGroupRule())
+async def antispam_handler(message):
+    await perform_spam_check(message)
+```
+
+**Для системных сообщений (только групповые чаты):**
+```python
+@bot.on.message(IsGroupRule())
+async def status_handler(message):
+    await handle_status(message)
+```
+
+**Для !команд (групповые чаты, сообщения начинаются с !):**
+```python
+@bot.on.message(IsGroupRule())
+async def custom_command_handler(message):
+    if not message.text or not message.text.startswith('!'):
+        return
+    # остальная логика
+```
+
+### 3. Упростить логику определения команд
+
+Функцию `get_command` можно удалить, так как теперь команды определяются через фильтры.
+
+### 4. Обеспечить правильный порядок обработчиков
+
+В vkbottle порядок регистрации важен. Разместить обработчики в таком порядке:
+
+1. Команды в личке (с фильтрами)
+2. Эхо-обработчик (с фильтром на личку)
+3. !команды в группах (с фильтром на группу и проверкой ! внутри)
+4. Антиспам (с фильтром на группу)
+5. Системные сообщения (с фильтром на группу)
+
+### 5. Проверить конфигурацию
+
+Убедиться, что в `config.json` правильно указан `superuser_id` (260509440) и он загружается в модуле `private_decorator_definition.py`.
+
+## Ожидаемый результат после изменений
+
+1. **В личных сообщениях:**
+   - `/start`, `/help` и другие команды работают только для суперпользователя
+   - Любой другой текст (не команды) возвращается эхом (для суперпользователя)
+   - Посторонние пользователи получают отказ
+
+2. **В групповых чатах:**
+   - !команды работают от администраторов
+   - Антиспам проверяет все сообщения
+   - Системные сообщения удаляются, если включена опция
+
+3. **Нет конфликтов между обработчиками** — каждое сообщение обрабатывается только тем обработчиком, для которого оно предназначено
+
+## Критерии приёмки
+
+- [ ] Бот отвечает на `/start` в личке
+- [ ] Бот отвечает эхом на обычный текст в личке
+- [ ] Посторонний пользователь получает отказ в личке
+- [ ] В групповом чате !команды срабатывают от администратора
+- [ ] Антиспам удаляет тестовое спам-сообщение
+- [ ] В логах нет ошибок о конфликтах обработчиков

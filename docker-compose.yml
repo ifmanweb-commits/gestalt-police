@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  vk-bot:
+    build: .
+    container_name: gestalt-police-bot
+    volumes:
+      - ./config.json:/app/config.json
+      - ./custom_commands.json:/app/custom_commands.json
+      - ./bot_database.json:/app/bot_database.json
+      - ./bot.log:/app/bot.log
+    env_file:
+      - .env
+    restart: unless-stopped
