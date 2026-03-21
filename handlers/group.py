@@ -11,19 +11,21 @@ from config import EXPERTS_CHAT_ID
 from services.custom_commands import get_command_response
 from services.spam_check import perform_spam_check
 from services.vk_api import get_user_name
+from services.wall_post import create_wall_post, update_wall_post
 from database import get_bot_db
-from models.questions_db import add_expert_answer, get_question_by_id
+from models.questions_db import add_expert_answer, get_question_by_id, get_question_full_data, update_question_post_id, get_question_post_id
 from tinydb import Query
 
 
-async def handle_expert_answer(message: Message, api: API) -> bool:
+async def handle_expert_answer(message: Message, group_api: API, user_api: API) -> bool:
     """
     Обработка ответов экспертов в беседе экспертов.
     Эксперт отвечает на сообщение бота → бот отправляет ответ пользователю.
     
     Args:
         message: Сообщение VK
-        api: VK API экземпляр
+        group_api: VK API экземпляр (групповой токен) для отправки сообщений
+        user_api: VK API экземпляр (пользовательский токен) для публикации постов
         
     Returns:
         bool: True если сообщение обработано
@@ -52,13 +54,14 @@ async def handle_expert_answer(message: Message, api: API) -> bool:
     qid_match = re.search(r'QID:(\d+)', reply_to.text)
     question_id = int(qid_match.group(1)) if qid_match else None
     
-    # Получаем имя эксперта
-    expert_name = await get_user_name(api, message.from_id)
+    # Получаем имя эксперта (используем group_api)
+    expert_name = await get_user_name(group_api, message.from_id)
     expert_link = f"https://vk.com/id{message.from_id}"
     
-    # Сохраняем ответ эксперта в БД
+    # Сохраняем ответ эксперта в БД и публикуем на стене
     if question_id:
         try:
+            # Сохраняем ответ в БД
             add_expert_answer(
                 question_id=question_id,
                 expert_id=message.from_id,
@@ -67,12 +70,53 @@ async def handle_expert_answer(message: Message, api: API) -> bool:
                 answer_text=message.text
             )
             logging.info(f"Ответ эксперта #{question_id} сохранён в БД от {expert_name}")
+            
+            # Получаем полные данные вопроса
+            question_data = get_question_full_data(question_id)
+            if question_data:
+                question_text = question_data.get('question_text', '')
+                expert_answers = question_data.get('expert_answers', [])
+                
+                # Проверяем, есть ли уже пост для этого вопроса
+                post_id = get_question_post_id(question_id)
+                
+                if post_id is None:
+                    # Поста нет - создаём новый (используем user_api)
+                    logging.info(f"Создание нового поста для вопроса #{question_id}")
+                    new_post_id = await create_wall_post(
+                        api=user_api,
+                        question_text=question_text,
+                        expert_answer={
+                            'expert_id': message.from_id,
+                            'expert_name': expert_name,
+                            'text': message.text
+                        }
+                    )
+                    if new_post_id > 0:
+                        update_question_post_id(question_id, new_post_id)
+                        logging.info(f"ID поста {new_post_id} сохранён для вопроса #{question_id}")
+                    else:
+                        logging.warning(f"Не удалось создать пост для вопроса #{question_id}")
+                else:
+                    # Пост есть - редактируем его, добавляя новый ответ (используем user_api)
+                    logging.info(f"Редактирование поста {post_id} для вопроса #{question_id}")
+                    updated = await update_wall_post(
+                        api=user_api,
+                        post_id=post_id,
+                        question_text=question_text,
+                        expert_answers=expert_answers
+                    )
+                    if updated:
+                        logging.info(f"Пост {post_id} успешно обновлён")
+                    else:
+                        logging.warning(f"Не удалось обновить пост {post_id} (возможно, превышен лимит символов)")
+            
         except Exception as db_error:
             logging.error(f"Ошибка сохранения ответа в БД: {db_error}")
     
-    # Отправляем ответ пользователю
+    # Отправляем ответ пользователю (используем group_api)
     try:
-        await api.messages.send(
+        await group_api.messages.send(
             peer_id=target_user_id,
             message=f"📩 **Ответ эксперта {expert_name}:**\n\n{message.text}",
             random_id=random.randint(1, 2**31)
@@ -80,7 +124,7 @@ async def handle_expert_answer(message: Message, api: API) -> bool:
         logging.info(f"Ответ отправлен пользователю {target_user_id}")
         
         # Уведомляем эксперта об отправке
-        await api.messages.send(
+        await group_api.messages.send(
             peer_id=message.peer_id,
             message=f"✅ Ответ отправлен пользователю https://vk.com/id{target_user_id}",
             reply_to=message.conversation_message_id,

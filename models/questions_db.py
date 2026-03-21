@@ -152,3 +152,63 @@ def get_all_questions() -> list:
     """
     db = get_questions_db()
     return db.all()
+
+
+def update_question_post_id(question_id: int, post_id: int) -> bool:
+    """
+    Сохраняет ID поста на стене для вопроса.
+    
+    Args:
+        question_id: ID вопроса
+        post_id: ID поста на стене VK
+        
+    Returns:
+        bool: True если успешно обновлено
+    """
+    db = get_questions_db()
+    Question = Query()
+    
+    question = db.get(Question.id == question_id)
+    if not question:
+        return False
+    
+    question['post_id'] = post_id
+    db.update(question, Question.id == question_id)
+    return True
+
+
+def get_question_post_id(question_id: int) -> int:
+    """
+    Получает ID поста на стене для вопроса.
+    
+    Args:
+        question_id: ID вопроса
+        
+    Returns:
+        int: ID поста или None если не установлен
+    """
+    db = get_questions_db()
+    Question = Query()
+    
+    question = db.get(Question.id == question_id)
+    if not question:
+        return None
+    
+    return question.get('post_id')
+
+
+def get_question_full_data(question_id: int) -> dict:
+    """
+    Получает полные данные вопроса включая все ответы экспертов.
+    
+    Args:
+        question_id: ID вопроса
+        
+    Returns:
+        dict: Данные вопроса или None если не найден
+    """
+    db = get_questions_db()
+    Question = Query()
+    
+    question = db.get(Question.id == question_id)
+    return question

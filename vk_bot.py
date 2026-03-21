@@ -5,12 +5,16 @@ VK Bot - Gestalt Police
 import logging
 import os
 from dotenv import load_dotenv
-from vkbottle import API, Bot
+from vkbottle import Bot
 
 # Загрузка переменных окружения
 load_dotenv()
 
-TOKEN = os.getenv('VK_TOKEN')
+# Импортируем экземпляры API (разделение токенов)
+from services.api_instances import group_api, user_api
+
+# Токен для инициализации бота (групповой)
+BOT_TOKEN = os.getenv('VK_TOKEN')
 
 # Загрузка конфигурации ПЕРЕД импортами, которые используют переменные
 from config import load_config
@@ -55,8 +59,9 @@ logging.basicConfig(
 logging.info("Логирование инициализировано")
 
 # Инициализация API и бота
-api = API(TOKEN)
-bot = Bot(TOKEN)
+# group_api используется для модерации, команд, вопросов
+# user_api используется только для публикации постов на стене
+bot = Bot(BOT_TOKEN)
 
 # ============================================================================
 # КОМАНДЫ СУПЕРПОЛЬЗОВАТЕЛЯ В ЛИЧКЕ
@@ -99,62 +104,62 @@ async def help_command(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("register"))
 async def register(message):
-    await register_chat(message, api)
+    await register_chat(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("unregister"))
 async def unregister(message):
-    await unregister_chat(message, api)
+    await unregister_chat(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("list"))
 async def list_chats_cmd(message):
-    await list_chats(message, api)
+    await list_chats(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("delete_statuses"))
 async def delete_statuses_cmd(message):
-    await delete_statuses(message, api)
+    await delete_statuses(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("allow_statuses"))
 async def allow_statuses_cmd(message):
-    await allow_statuses(message, api)
+    await allow_statuses(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("ruleslist"))
 async def ruleslist_cmd(message):
-    await ruleslist(message, api)
+    await ruleslist(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("setrule"))
 async def setrule_cmd(message):
-    await setrule(message, api)
+    await setrule(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("delrule"))
 async def delrule_cmd(message):
-    await delrule(message, api)
+    await delrule(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertreg"))
 async def expertreg_cmd(message):
-    await expert_reg(message, api)
+    await expert_reg(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertdel"))
 async def expertdel_cmd(message):
-    await expert_del(message, api)
+    await expert_del(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertlist"))
 async def expertlist_cmd(message):
-    await expert_list(message, api)
+    await expert_list(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("chatid"))
 async def chatid_cmd(message):
-    await get_chat_id(message, api)
+    await get_chat_id(message, group_api)
 
 
 # ============================================================================
@@ -168,7 +173,7 @@ async def private_handler(message):
     Порядок: #вопрос → отказ обычным пользователям
     """
     # Сначала пробуем обработать #вопрос
-    if await handle_question(message, api):
+    if await handle_question(message, group_api):
         return
     
     # Если не #вопрос и не суперпользователь - отказ
@@ -183,7 +188,7 @@ async def private_handler(message):
 @bot.on.message(IsGroupRule() & CommandRule("chatid"))
 async def chatid_group_cmd(message):
     """Обработчик /chatid в групповых чатах"""
-    await get_chat_id(message, api)
+    await get_chat_id(message, group_api)
 
 
 @bot.on.message(IsGroupRule())
@@ -197,19 +202,19 @@ async def group_handler(message):
     4. Антиспам
     """
     # 1. Ответ эксперта
-    if await handle_expert_answer(message, api):
+    if await handle_expert_answer(message, group_api, user_api):
         return
     
     # 2. !команда
-    if await handle_custom_command(message, api):
+    if await handle_custom_command(message, group_api):
         return
     
     # 3. Удаление статусов
-    if await handle_status_deletion(message, api):
+    if await handle_status_deletion(message, group_api):
         return
     
     # 4. Антиспам
-    await handle_antispam(message, api)
+    await handle_antispam(message, group_api)
 
 
 # ============================================================================
