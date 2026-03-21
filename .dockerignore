@@ -8,7 +8,6 @@ htmlcov/
 .git
 .gitignore
 *.log
-!bot.log
 .env
 config.json
 bot_database.json
@@ -21,8 +20,3 @@ logs/
 примеры.txt
 deploy.sh
 init-files.sh
-private_decorator_definition.py
-experts.py
-questions.py
-rules.py
-is_spam_message.py

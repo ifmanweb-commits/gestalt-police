@@ -4,6 +4,9 @@ services:
   vk-bot:
     build: .
     container_name: gestalt-police-bot
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       # Монтируем файлы данных для сохранения состояния между перезапусками
       - ./config.json:/app/config.json
