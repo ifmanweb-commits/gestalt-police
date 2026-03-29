@@ -214,7 +214,7 @@ async def group_handler(message):
         return
     
     # 4. Антиспам
-    await handle_antispam(message, group_api)
+    # await handle_antispam(message, group_api)  # ЗАКОММЕНТИРОВАНО - проверка на спам отключена
 
 
 # ============================================================================
