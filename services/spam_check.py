@@ -71,8 +71,8 @@ async def perform_spam_check(message, api: API):
         message: Сообщение VK
         api: VK API экземпляр
     """
-    if not message.text and not message.attachments:
-        return
+    # Проверка на спам отключена
+    return
     
     chat_id = message.peer_id
     from_user = message.from_id

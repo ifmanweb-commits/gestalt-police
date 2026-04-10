@@ -7,7 +7,7 @@ import re
 from vkbottle import API
 from vkbottle.bot import Message
 
-from config import EXPERTS_CHAT_ID
+from config import EXPERTS_CHAT_ID, GROUP_ID
 from services.custom_commands import get_command_response
 from services.spam_check import perform_spam_check
 from services.vk_api import get_user_name
@@ -59,6 +59,7 @@ async def handle_expert_answer(message: Message, group_api: API, user_api: API) 
     expert_link = f"https://vk.com/id{message.from_id}"
     
     # Сохраняем ответ эксперта в БД и публикуем на стене
+    post_id = None
     if question_id:
         try:
             # Сохраняем ответ в БД
@@ -94,6 +95,7 @@ async def handle_expert_answer(message: Message, group_api: API, user_api: API) 
                     )
                     if new_post_id > 0:
                         update_question_post_id(question_id, new_post_id)
+                        post_id = new_post_id
                         logging.info(f"ID поста {new_post_id} сохранён для вопроса #{question_id}")
                     else:
                         logging.warning(f"Не удалось создать пост для вопроса #{question_id}")
@@ -114,24 +116,33 @@ async def handle_expert_answer(message: Message, group_api: API, user_api: API) 
         except Exception as db_error:
             logging.error(f"Ошибка сохранения ответа в БД: {db_error}")
     
-    # Отправляем ответ пользователю (используем group_api)
-    try:
-        await group_api.messages.send(
-            peer_id=target_user_id,
-            message=f"📩 **Ответ эксперта {expert_name}:**\n\n{message.text}",
-            random_id=random.randint(1, 2**31)
+    # Отправляем уведомление пользователю со ссылкой на пост
+    if post_id:
+        post_url = f"https://vk.com/wall-{GROUP_ID}_{post_id}"
+        notify_message = (
+            f"🔔 Кто-то из экспертов ответил на ваш вопрос. Вы можете прочитать его тут:\n"
+            f"{post_url}\n\n"
+            f"Если у вас есть какие-то дополнения - не задавайте новый вопрос здесь. "
+            f"Пишите в комментариях под своим вопросом в посте."
         )
-        logging.info(f"Ответ отправлен пользователю {target_user_id}")
         
-        # Уведомляем эксперта об отправке
-        await group_api.messages.send(
-            peer_id=message.peer_id,
-            message=f"✅ Ответ отправлен пользователю https://vk.com/id{target_user_id}",
-            reply_to=message.conversation_message_id,
-            random_id=random.randint(1, 2**31)
-        )
-    except Exception as e:
-        logging.error(f"Ошибка при отправке ответа пользователю: {e}")
+        try:
+            await group_api.messages.send(
+                peer_id=target_user_id,
+                message=notify_message,
+                random_id=random.randint(1, 2**31)
+            )
+            logging.info(f"Уведомление отправлено пользователю {target_user_id}")
+            
+            # Уведомляем эксперта об отправке
+            await group_api.messages.send(
+                peer_id=message.peer_id,
+                message=f"✅ Ответ отправлен пользователю https://vk.com/id{target_user_id}",
+                reply_to=message.conversation_message_id,
+                random_id=random.randint(1, 2**31)
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке уведомления пользователю: {e}")
     
     return True
 
