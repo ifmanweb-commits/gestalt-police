@@ -13,7 +13,7 @@ from services.custom_commands import add_command, remove_command, get_all_comman
 from services.vk_api import resolve_user_id
 from services.spam_check import is_user_admin_in_chat, _update_admin_cache, _is_admin_cache_valid, _get_admin_cache_record
 from services.tokens import update_user_tokens, get_user_access_token, get_user_refresh_token
-from services.api_instances import check_token_validity, refresh_user_api, handle_token_refresh, user_api
+from services import api_instances
 from config import GROUP_ID
 from tinydb import Query
 
@@ -412,14 +412,14 @@ async def test_post_cmd(message: Message, api: API):
         await message.answer("❌ Эта команда доступна только суперпользователю.")
         return
     
-    if user_api is None:
+    if api_instances.user_api is None:
         await message.answer("❌ user_api не инициализирован. Проверьте tokens.json.")
         return
     
     try:
         owner_id = -GROUP_ID
         
-        response = await user_api.wall.post(
+        response = await api_instances.user_api.wall.post(
             owner_id=owner_id,
             from_group=1,
             message="🧪 Тестовый пост\n\nЭто тестовое сообщение для проверки работы бота."

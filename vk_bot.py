@@ -11,7 +11,8 @@ from vkbottle import Bot
 load_dotenv()
 
 # Импортируем экземпляры API (разделение токенов)
-from services.api_instances import group_api, user_api, init_apis
+from services import api_instances
+from services.api_instances import init_apis
 
 # Токен для инициализации бота (групповой)
 BOT_TOKEN = os.getenv('VK_TOKEN')
@@ -107,77 +108,77 @@ async def help_command(message):
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("register"))
 async def register(message):
-    await register_chat(message, group_api)
+    await register_chat(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("unregister"))
 async def unregister(message):
-    await unregister_chat(message, group_api)
+    await unregister_chat(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("list"))
 async def list_chats_cmd(message):
-    await list_chats(message, group_api)
+    await list_chats(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("ruleslist"))
 async def ruleslist_cmd(message):
-    await ruleslist(message, group_api)
+    await ruleslist(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("setrule"))
 async def setrule_cmd(message):
-    await setrule(message, group_api)
+    await setrule(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("delrule"))
 async def delrule_cmd(message):
-    await delrule(message, group_api)
+    await delrule(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertreg"))
 async def expertreg_cmd(message):
-    await expert_reg(message, group_api)
+    await expert_reg(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertdel"))
 async def expertdel_cmd(message):
-    await expert_del(message, group_api)
+    await expert_del(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("expertlist"))
 async def expertlist_cmd(message):
-    await expert_list(message, group_api)
+    await expert_list(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("chatid"))
 async def chatid_cmd(message):
-    await get_chat_id(message, group_api)
+    await get_chat_id(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("refresh_admins"))
 async def refresh_admins_cmd(message):
-    await refresh_admin_cache(message, group_api)
+    await refresh_admin_cache(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("settoken"))
 async def set_token_cmd(message):
-    await set_token(message, group_api)
+    await set_token(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("checktoken"))
 async def check_token_handler(message):
-    await check_token_cmd(message, group_api)
+    await check_token_cmd(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("refreshtoken"))
 async def refresh_token_handler(message):
-    await refresh_token_cmd(message, group_api)
+    await refresh_token_cmd(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("testpost"))
 async def test_post_cmd_handler(message):
-    await test_post_cmd(message, group_api)
+    await test_post_cmd(message, api_instances.group_api)
 
 
 # ============================================================================
@@ -191,7 +192,7 @@ async def private_handler(message):
     Порядок: #вопрос → отказ обычным пользователям
     """
     # Сначала пробуем обработать #вопрос
-    if await handle_question(message, group_api):
+    if await handle_question(message, api_instances.group_api):
         return
     
     # Если не #вопрос и не суперпользователь - отказ
@@ -206,7 +207,7 @@ async def private_handler(message):
 @bot.on.message(IsGroupRule() & CommandRule("chatid"))
 async def chatid_group_cmd(message):
     """Обработчик /chatid в групповых чатах"""
-    await get_chat_id(message, group_api)
+    await get_chat_id(message, api_instances.group_api)
 
 
 @bot.on.message(IsGroupRule())
@@ -219,15 +220,15 @@ async def group_handler(message):
     3. Антиспам
     """
     # 1. Ответ эксперта
-    if await handle_expert_answer(message, group_api, user_api):
+    if await handle_expert_answer(message, api_instances.group_api, api_instances.user_api):
         return
     
     # 2. !команда
-    if await handle_custom_command(message, group_api):
+    if await handle_custom_command(message, api_instances.group_api):
         return
     
     # 3. Антиспам
-    # await handle_antispam(message, group_api)  # ЗАКОММЕНТИРОВАНО - проверка на спам отключена
+    # await handle_antispam(message, api_instances.group_api)  # ЗАКОММЕНТИРОВАНО - проверка на спам отключена
 
 
 # ============================================================================
