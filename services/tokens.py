@@ -7,6 +7,8 @@
   "user_access_token": "...",
   "user_refresh_token": "...",
   "client_id": 54497712,
+  "client_secret": "...",
+  "device_id": "...",
   "redirect_uri": "https://oauth.vk.com/blank.html"
 }
 
@@ -23,6 +25,8 @@ TOKENS_FILE = "./tokens.json"
 _user_access_token = None
 _user_refresh_token = None
 _client_id = None
+_client_secret = None
+_device_id = None
 _redirect_uri = None
 _group_token = None
 
@@ -40,11 +44,13 @@ def load_tokens() -> dict:
     
     load_dotenv()
     
-    # Токены по умолчанию из ТЗ
+    # Токены по умолчанию из ТЗ (OAuth 2.1)
     DEFAULT_TOKENS = {
         'user_access_token': 'vk2.a.TC9tl31q7ig21luLLIgK9U4tUXzyUVQOKcobiO8WnEMB9cGTmm5EMh2TfLAZ24mf_0F_iSEz0Jeb5SQTWpygtQKCg_lWVhNE6IcTvcrEil2g0g_-UZeE5W7MVgySlpGl5BP5BnnPJVhIpQVrUgb80YLUokWWHfseTpExUVKf6JRXvWAbrwVo1oHIZ0WxNGsa6lLZHSKXE64W0B0ohG3fS2QqGAPnHYE9VwdhKAcI0OtI66Xz2s3ZQRoibqd9R4I_',
         'user_refresh_token': 'vk2.a.a3orwIRYeUOr95A6l-LvHTmhHqXYReQ3vtFuJefIyUyzfW58UVAphLEGHhUO4BQvfoEbQMDvoeREBFyEmwX8Nn1sm7I7WHcfBj-eXzBAtrF-tPllU05lZZDH44ESfCyivh062hMIKa-p61nN_pTQfxUjM3dlfNzS0UIUrhZWaWMEtXO3T3aPW25LeSDxYtNgAp_KB5bH9NG6TPKivtdXYQlSNUX-YhT40g5hTJZ_FG0',
         'client_id': 54497712,
+        'client_secret': 'MTjG07X8PP9HUMUILZbl',
+        'device_id': 'FncL_2GucF_8W9Qq_WuBjGRIkKkUM2hiA-nqH4xXg1ZdLDyAsuAzIjueVhiAezIzA-V_8rgW0Sp5A3t77c8UYw',
         'redirect_uri': 'https://oauth.vk.com/blank.html'
     }
     
@@ -80,6 +86,8 @@ def load_tokens() -> dict:
                     'user_access_token': user_token,
                     'user_refresh_token': '',
                     'client_id': 54497712,
+                    'client_secret': 'MTjG07X8PP9HUMUILZbl',
+                    'device_id': 'FncL_2GucF_8W9Qq_WuBjGRIkKkUM2hiA-nqH4xXg1ZdLDyAsuAzIjueVhiAezIzA-V_8rgW0Sp5A3t77c8UYw',
                     'redirect_uri': 'https://oauth.vk.com/blank.html'
                 }
             else:
@@ -110,7 +118,7 @@ def load_tokens() -> dict:
 
 def _load_globals(tokens: dict) -> None:
     """Загружает глобальные переменные из словаря токенов."""
-    global _user_access_token, _user_refresh_token, _client_id, _redirect_uri
+    global _user_access_token, _user_refresh_token, _client_id, _client_secret, _device_id, _redirect_uri
     
     if 'user_access_token' in tokens:
         _user_access_token = tokens.get('user_access_token')
@@ -119,12 +127,14 @@ def _load_globals(tokens: dict) -> None:
     
     _user_refresh_token = tokens.get('user_refresh_token', '')
     _client_id = tokens.get('client_id', 54497712)
+    _client_secret = tokens.get('client_secret', 'MTjG07X8PP9HUMUILZbl')
+    _device_id = tokens.get('device_id', 'FncL_2GucF_8W9Qq_WuBjGRIkKkUM2hiA-nqH4xXg1ZdLDyAsuAzIjueVhiAezIzA-V_8rgW0Sp5A3t77c8UYw')
     _redirect_uri = tokens.get('redirect_uri', 'https://oauth.vk.com/blank.html')
 
 
 def save_tokens_data(tokens: dict) -> None:
     """Сохраняет токены в tokens.json."""
-    global _user_access_token, _user_refresh_token, _client_id, _redirect_uri
+    global _user_access_token, _user_refresh_token, _client_id, _client_secret, _device_id, _redirect_uri
     
     try:
         with open(TOKENS_FILE, "w", encoding="utf-8") as f:
@@ -164,7 +174,9 @@ def get_group_token() -> str | None:
 
 async def refresh_access_token() -> bool:
     """
-    Обновляет access_token используя refresh_token через VK OAuth API.
+    Обновляет access_token используя refresh_token через VK OAuth 2.1 API.
+    
+    Использует endpoint https://id.vk.com/oauth2/auth с client_secret и device_id.
     
     Returns:
         bool: True если токен успешно обновлён
@@ -177,28 +189,36 @@ async def refresh_access_token() -> bool:
         return False
     
     client_id = get_client_id()
+    client_secret = _client_secret or 'MTjG07X8PP9HUMUILZbl'
+    device_id = _device_id or 'FncL_2GucF_8W9Qq_WuBjGRIkKkUM2hiA-nqH4xXg1ZdLDyAsuAzIjueVhiAezIzA-V_8rgW0Sp5A3t77c8UYw'
     
-    url = "https://oauth.vk.com/access_token"
-    params = {
+    # VK OAuth 2.1 endpoint
+    url = "https://id.vk.com/oauth2/auth"
+    data = {
         'grant_type': 'refresh_token',
         'refresh_token': refresh_token,
-        'client_id': client_id
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'device_id': device_id
     }
     
     try:
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, params=params) as response:
-                data = await response.json()
+            async with session.post(url, data=data) as response:
+                response_data = await response.json()
+                logging.info(f"VK API ответ: {response_data}")
                 
-                if 'access_token' in data:
-                    new_access_token = data['access_token']
-                    new_refresh_token = data.get('refresh_token', refresh_token)
+                if 'access_token' in response_data:
+                    new_access_token = response_data['access_token']
+                    new_refresh_token = response_data.get('refresh_token', refresh_token)
                     
                     tokens = {
                         'user_access_token': new_access_token,
                         'user_refresh_token': new_refresh_token,
                         'client_id': client_id,
+                        'client_secret': client_secret,
+                        'device_id': device_id,
                         'redirect_uri': get_redirect_uri()
                     }
                     save_tokens_data(tokens)
@@ -206,7 +226,7 @@ async def refresh_access_token() -> bool:
                     logging.info("access_token успешно обновлён через refresh_token")
                     return True
                 else:
-                    logging.error(f"Ошибка обновления токена: {data}")
+                    logging.error(f"Ошибка обновления токена: {response_data}")
                     return False
                     
     except Exception as e:
@@ -232,6 +252,8 @@ def update_user_tokens(access_token: str, refresh_token: str = None) -> bool:
             'user_access_token': access_token,
             'user_refresh_token': refresh_token or _user_refresh_token,
             'client_id': get_client_id(),
+            'client_secret': _client_secret or 'MTjG07X8PP9HUMUILZbl',
+            'device_id': _device_id or 'FncL_2GucF_8W9Qq_WuBjGRIkKkUM2hiA-nqH4xXg1ZdLDyAsuAzIjueVhiAezIzA-V_8rgW0Sp5A3t77c8UYw',
             'redirect_uri': get_redirect_uri()
         }
         save_tokens_data(tokens)
