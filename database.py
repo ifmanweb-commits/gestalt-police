@@ -7,6 +7,7 @@ from tinydb import TinyDB, Query
 BOT_DATABASE_FILE = "./bot_database.json"
 EXPERTS_DATABASE_FILE = "./experts.json"
 QUESTIONS_DATABASE_FILE = "./questions.json"
+ADMIN_CACHE_DATABASE_FILE = "./admin_cache.json"
 
 
 def get_db(file_path: str) -> TinyDB:
@@ -36,3 +37,8 @@ def get_experts_db() -> TinyDB:
 def get_questions_db() -> TinyDB:
     """Возвращает базу данных вопросов."""
     return get_db(QUESTIONS_DATABASE_FILE)
+
+
+def get_admin_cache_db() -> TinyDB:
+    """Возвращает базу данных кэша администраторов."""
+    return get_db(ADMIN_CACHE_DATABASE_FILE)

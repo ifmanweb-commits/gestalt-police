@@ -171,6 +171,7 @@ bot_database.json
 custom_commands.json
 experts.json
 questions.json
+admin_cache.json
 *.log
 
 # Logs directory

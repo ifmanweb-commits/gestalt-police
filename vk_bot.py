@@ -31,13 +31,13 @@ from models.questions_db import init_questions_db
 from handlers.private import handle_question, handle_unauthorized
 from handlers.group import (
     handle_expert_answer, handle_custom_command,
-    handle_status_deletion, handle_antispam
+    handle_antispam
 )
 from handlers.admin import (
     register_chat, unregister_chat, list_chats,
-    delete_statuses, allow_statuses, ruleslist,
+    ruleslist,
     setrule, delrule, expert_reg, expert_del, expert_list,
-    get_chat_id
+    get_chat_id, refresh_admin_cache
 )
 from services.custom_commands import load_custom_commands
 
@@ -88,8 +88,6 @@ async def help_command(message):
 /register <chat_id> - Зарегистрировать чат
 /unregister <chat_id> - Отменить регистрацию чата
 /list - Показать ваши зарегистрированные чаты и их идентификаторы
-/delete_statuses <chat_id> - Включить автоматическое удаление статусов (по умолчанию выключено)
-/allow_statuses <chat_id> - Отключить автоматическое удаление статусов
 /ruleslist - Показать список всех сохраненных пользовательских команд
 /setrule $!команда$ $Текст сообщения$ - Создать новую или перезаписать существующую команду
 /delrule $!команда$ - Удалить существующую команду
@@ -97,6 +95,7 @@ async def help_command(message):
 /expertdel <id> - Удалить эксперта по ID
 /expertlist - Показать список всех экспертов
 /chatid - Получить ID текущего чата (работает в групповых чатах для администраторов)
+/refresh_admins - Принудительно обновить кэш администраторов чата
 /help - Показать справку
 """
     await message.answer(help_text)
@@ -115,16 +114,6 @@ async def unregister(message):
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("list"))
 async def list_chats_cmd(message):
     await list_chats(message, group_api)
-
-
-@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("delete_statuses"))
-async def delete_statuses_cmd(message):
-    await delete_statuses(message, group_api)
-
-
-@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("allow_statuses"))
-async def allow_statuses_cmd(message):
-    await allow_statuses(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("ruleslist"))
@@ -162,6 +151,11 @@ async def chatid_cmd(message):
     await get_chat_id(message, group_api)
 
 
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("refresh_admins"))
+async def refresh_admins_cmd(message):
+    await refresh_admin_cache(message, group_api)
+
+
 # ============================================================================
 # ЛИЧНЫЕ СООБЩЕНИЯ (ВСЕ ПОЛЬЗОВАТЕЛИ)
 # ============================================================================
@@ -197,9 +191,8 @@ async def group_handler(message):
     Единый обработчик групповых сообщений.
     Порядок обработки:
     1. Ответ эксперта в беседе экспертов
-    2. !команда от админа
-    3. Удаление статусов
-    4. Антиспам
+    2. !команда от админа или эксперта
+    3. Антиспам
     """
     # 1. Ответ эксперта
     if await handle_expert_answer(message, group_api, user_api):
@@ -209,11 +202,7 @@ async def group_handler(message):
     if await handle_custom_command(message, group_api):
         return
     
-    # 3. Удаление статусов
-    if await handle_status_deletion(message, group_api):
-        return
-    
-    # 4. Антиспам
+    # 3. Антиспам
     # await handle_antispam(message, group_api)  # ЗАКОММЕНТИРОВАНО - проверка на спам отключена
 
 

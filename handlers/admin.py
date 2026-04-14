@@ -11,7 +11,7 @@ from database import get_bot_db
 from models.experts_db import add_expert, remove_expert, get_expert_list
 from services.custom_commands import add_command, remove_command, get_all_commands, save_custom_commands
 from services.vk_api import resolve_user_id
-from services.spam_check import is_user_admin_in_chat
+from services.spam_check import is_user_admin_in_chat, _update_admin_cache, _is_admin_cache_valid, _get_admin_cache_record
 from tinydb import Query
 
 logger = logging.getLogger(__name__)
@@ -107,65 +107,6 @@ async def list_chats(message: Message, api: API):
         await message.answer(chat_list)
     else:
         await message.answer("У вас нет зарегистрированных чатов.")
-
-
-async def delete_statuses(message: Message, api: API):
-    """
-    /delete_statuses <chat_id> - Включить удаление статусов.
-    """
-    args = message.text.split()
-    if len(args) < 2:
-        await message.answer('Добавьте идентификатор чата после команды.')
-        return
-    
-    try:
-        chat_id = int(args[1])
-    except ValueError:
-        await message.answer('Неверный формат идентификатора чата. Используйте числовой ID.')
-        return
-    
-    user_id = message.from_id
-    db = get_bot_db()
-    User = Query()
-    user_data = db.get(User.user_id == user_id)
-    
-    if user_data and chat_id in user_data.get('chats', []):
-        if 'delete_statuses' not in user_data:
-            user_data['delete_statuses'] = {}
-        user_data['delete_statuses'][str(chat_id)] = True
-        db.update(user_data, User.user_id == user_id)
-        await message.answer(f'Автоматическое удаление статусов включено для чата {chat_id}')
-    else:
-        await message.answer('Чат не зарегистрирован.')
-
-
-async def allow_statuses(message: Message, api: API):
-    """
-    /allow_statuses <chat_id> - Отключить удаление статусов.
-    """
-    args = message.text.split()
-    if len(args) < 2:
-        await message.answer('Добавьте идентификатор чата после команды.')
-        return
-    
-    try:
-        chat_id = int(args[1])
-    except ValueError:
-        await message.answer('Неверный формат идентификатора чата. Используйте числовой ID.')
-        return
-    
-    user_id = message.from_id
-    db = get_bot_db()
-    User = Query()
-    user_data = db.get(User.user_id == user_id)
-    
-    if user_data and chat_id in user_data['chats']:
-        if 'delete_statuses' in user_data:
-            user_data['delete_statuses'][str(chat_id)] = False
-        db.update(user_data, User.user_id == user_id)
-        await message.answer(f'Автоматическое удаление статусов отключено для чата {chat_id}')
-    else:
-        await message.answer('Чат не зарегистрирован.')
 
 
 async def ruleslist(message: Message, api: API):
@@ -339,3 +280,25 @@ async def get_chat_id(message: Message, api: API):
         return
     
     await message.answer(f"ID этого чата: {message.peer_id}")
+
+
+async def refresh_admin_cache(message: Message, api: API):
+    """
+    /refresh_admins - Принудительно обновить кэш администраторов.
+    Работает только для администраторов.
+    """
+    # Сначала проверяем по текущему кэшу (чтобы не любой мог обновлять)
+    is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
+    if not is_admin:
+        await message.answer("❌ Эта команда доступна только администраторам чата.")
+        return
+    
+    chat_id = message.peer_id
+    
+    # Обновляем кэш через API
+    admin_ids = await _update_admin_cache(api, chat_id)
+    
+    if admin_ids:
+        await message.answer(f"✅ Кэш администраторов обновлён. Найдено {len(admin_ids)} администраторов.")
+    else:
+        await message.answer("⚠️ Не удалось получить список администраторов. Проверьте права бота в чате.")

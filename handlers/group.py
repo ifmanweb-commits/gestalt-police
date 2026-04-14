@@ -150,6 +150,7 @@ async def handle_expert_answer(message: Message, group_api: API, user_api: API) 
 async def handle_custom_command(message: Message, api: API) -> bool:
     """
     Обработка !команд в групповых чатах.
+    Команда выполняется если пользователь - администратор чата ИЛИ эксперт.
     
     Args:
         message: Сообщение VK
@@ -165,11 +166,15 @@ async def handle_custom_command(message: Message, api: API) -> bool:
     if message.from_id < 0:
         return False
     
-    # Проверяем администратора
+    # Проверяем администратора ИЛИ эксперта
     from services.spam_check import is_user_admin_in_chat
+    from models.experts_db import is_expert
+    
     is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
-    if not is_admin:
-        logging.info(f"Пользователь {message.from_id} не является администратором в чате {message.peer_id}")
+    is_expert_user = is_expert(message.from_id)
+    
+    if not (is_admin or is_expert_user):
+        logging.info(f"Пользователь {message.from_id} не является администратором или экспертом в чате {message.peer_id}")
         return False
     
     response = get_command_response(text)
@@ -207,38 +212,6 @@ async def handle_custom_command(message: Message, api: API) -> bool:
         logging.error(f"Ошибка при отправке ответа на команду: {e}")
     
     return True
-
-
-async def handle_status_deletion(message: Message, api: API) -> bool:
-    """
-    Удаление статусов (если включено для этого чата).
-    
-    Args:
-        message: Сообщение VK
-        api: VK API экземпляр
-        
-    Returns:
-        bool: True если статус удалён
-    """
-    chat_id = message.peer_id
-    db = get_bot_db()
-    User = Query()
-    
-    registered_users = db.search(User.chats.any([chat_id]))
-    for user_data in registered_users:
-        delete_status = user_data.get('delete_statuses', {}).get(str(chat_id), False)
-        if delete_status:
-            try:
-                await api.messages.delete(
-                    peer_id=chat_id,
-                    conversation_message_ids=[message.conversation_message_id]
-                )
-                return True
-            except Exception as e:
-                logging.warning(f"Не удалось удалить статус в чате {chat_id}: {str(e)}")
-            return True
-    
-    return False
 
 
 async def handle_antispam(message: Message, api: API) -> bool:

@@ -5,11 +5,15 @@ import logging
 import random
 import re
 import emoji
+import time
 from vkbottle import API
 
 from is_spam_message import new_is_spam_message, has_critical_patterns, has_mixed_words
-from database import get_bot_db, get_bot_db
+from database import get_bot_db, get_admin_cache_db
 from tinydb import Query
+
+# Время жизни кэша администраторов (24 часа в секундах)
+ADMIN_CACHE_TTL = 24 * 60 * 60
 
 
 BOT_AD_PATTERNS = [
@@ -35,6 +39,97 @@ def has_bot_advertisement(text: str) -> bool:
     return False
 
 
+def _get_admin_cache_record(chat_id: int) -> dict | None:
+    """
+    Получает запись кэша для чата.
+    
+    Args:
+        chat_id: ID чата
+        
+    Returns:
+        dict | None: Запись кэша или None
+    """
+    db = get_admin_cache_db()
+    ChatCache = Query()
+    return db.get(ChatCache.chat_id == chat_id)
+
+
+def _save_admin_cache_record(chat_id: int, admin_ids: list[int]) -> None:
+    """
+    Сохраняет или обновляет запись кэша для чата.
+    
+    Args:
+        chat_id: ID чата
+        admin_ids: Список ID администраторов
+    """
+    db = get_admin_cache_db()
+    ChatCache = Query()
+    existing = db.get(ChatCache.chat_id == chat_id)
+    
+    record = {
+        'chat_id': chat_id,
+        'admin_ids': admin_ids,
+        'updated_at': int(time.time())
+    }
+    
+    if existing:
+        db.update(record, ChatCache.chat_id == chat_id)
+    else:
+        db.insert(record)
+    
+    logging.info(f"Кэш администраторов для чата {chat_id} обновлён")
+
+
+def _is_admin_cache_valid(chat_id: int) -> bool:
+    """
+    Проверяет, действителен ли кэш для чата.
+    
+    Args:
+        chat_id: ID чата
+        
+    Returns:
+        bool: True если кэш действителен
+    """
+    record = _get_admin_cache_record(chat_id)
+    if record is None:
+        return False
+    
+    updated_at = record.get('updated_at', 0)
+    current_time = int(time.time())
+    
+    return (current_time - updated_at) < ADMIN_CACHE_TTL
+
+
+async def _update_admin_cache(api: API, chat_id: int) -> list[int]:
+    """
+    Обновляет кэш администраторов для чата через VK API.
+    
+    Args:
+        api: VK API экземпляр
+        chat_id: ID чата
+        
+    Returns:
+        list[int]: Список ID администраторов
+    """
+    try:
+        members = await api.messages.get_conversation_members(chat_id)
+        admin_ids = []
+        
+        for member in members.items:
+            if hasattr(member, 'is_admin') and member.is_admin is True:
+                admin_ids.append(member.id)
+            elif hasattr(member, 'is_owner') and member.is_owner is True:
+                admin_ids.append(member.id)
+        
+        _save_admin_cache_record(chat_id, admin_ids)
+        logging.info(f"Получено {len(admin_ids)} администраторов для чата {chat_id}")
+        return admin_ids
+        
+    except Exception as e:
+        logging.warning(f"Не удалось получить администраторов для чата {chat_id}: {e}")
+        return []
+
+
 async def is_user_admin_in_chat(api: API, chat_id: int, user_id: int) -> bool:
     """
     Проверяет, является ли пользователь администратором в чате.
@@ -49,15 +144,31 @@ async def is_user_admin_in_chat(api: API, chat_id: int, user_id: int) -> bool:
     """
     try:
         from config import SUPERUSER_ID
+        
+        # Суперпользователь всегда администратор
         if user_id == SUPERUSER_ID:
             return True
         
-        db = get_bot_db()
-        User = Query()
-        user_data = db.get(User.user_id == user_id)
-        if user_data and chat_id in user_data.get('chats', []):
-            return True
-        return False
+        # Проверяем только беседы (chat_id > 2000000000)
+        if chat_id <= 2000000000:
+            logging.debug(f"Чат {chat_id} не является беседой, проверка админства не требуется")
+            return False
+        
+        # Проверяем кэш
+        if _is_admin_cache_valid(chat_id):
+            record = _get_admin_cache_record(chat_id)
+            if record and user_id in record.get('admin_ids', []):
+                logging.debug(f"Пользователь {user_id} найден в кэше администраторов чата {chat_id}")
+                return True
+            logging.debug(f"Пользователь {user_id} не найден в кэше администраторов чата {chat_id}")
+            return False
+        
+        # Кэш устарел или отсутствует - обновляем через API
+        logging.info(f"Кэш для чата {chat_id} устарел, обновление через API")
+        admin_ids = await _update_admin_cache(api, chat_id)
+        
+        return user_id in admin_ids
+        
     except Exception as e:
         logging.warning(f"Не удалось проверить статус пользователя {user_id} в чате {chat_id}: {e}")
         return False
