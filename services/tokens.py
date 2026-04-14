@@ -30,24 +30,64 @@ _group_token = None
 def load_tokens() -> dict:
     """
     Загружает токены из tokens.json.
-    Если файл не существует, создаёт его с данными для OAuth 2.1.
+    Если файл не существует или пуст, создаёт его с данными для OAuth 2.1.
+    
+    Токены по умолчанию из ТЗ (для тестирования):
+    - user_access_token: vk2.a.TC9tl31q7ig21luLLIgK9U4tUXzyUVQOKcobiO8WnEMB9cGTmm5EMh2TfLAZ24mf_0F_iSEz0Jeb5SQTWpygtQKCg_lWVhNE6IcTvcrEil2g0g_-UZeE5W7MVgySlpGl5BP5BnnPJVhIpQVrUgb80YLUokWWHfseTpExUVKf6JRXvWAbrwVo1oHIZ0WxNGsa6lLZHSKXE64W0B0ohG3fS2QqGAPnHYE9VwdhKAcI0OtI66Xz2s3ZQRoibqd9R4I_
+    - user_refresh_token: vk2.a.a3orwIRYeUOr95A6l-LvHTmhHqXYReQ3vtFuJefIyUyzfW58UVAphLEGHhUO4BQvfoEbQMDvoeREBFyEmwX8Nn1sm7I7WHcfBj-eXzBAtrF-tPllU05lZZDH44ESfCyivh062hMIKa-p61nN_pTQfxUjM3dlfNzS0UIUrhZWaWMEtXO3T3aPW25LeSDxYtNgAp_KB5bH9NG6TPKivtdXYQlSNUX-YhT40g5hTJZ_FG0
     """
     global _user_access_token, _user_refresh_token, _client_id, _redirect_uri, _group_token
     
     load_dotenv()
     
+    # Токены по умолчанию из ТЗ
+    DEFAULT_TOKENS = {
+        'user_access_token': 'vk2.a.TC9tl31q7ig21luLLIgK9U4tUXzyUVQOKcobiO8WnEMB9cGTmm5EMh2TfLAZ24mf_0F_iSEz0Jeb5SQTWpygtQKCg_lWVhNE6IcTvcrEil2g0g_-UZeE5W7MVgySlpGl5BP5BnnPJVhIpQVrUgb80YLUokWWHfseTpExUVKf6JRXvWAbrwVo1oHIZ0WxNGsa6lLZHSKXE64W0B0ohG3fS2QqGAPnHYE9VwdhKAcI0OtI66Xz2s3ZQRoibqd9R4I_',
+        'user_refresh_token': 'vk2.a.a3orwIRYeUOr95A6l-LvHTmhHqXYReQ3vtFuJefIyUyzfW58UVAphLEGHhUO4BQvfoEbQMDvoeREBFyEmwX8Nn1sm7I7WHcfBj-eXzBAtrF-tPllU05lZZDH44ESfCyivh062hMIKa-p61nN_pTQfxUjM3dlfNzS0UIUrhZWaWMEtXO3T3aPW25LeSDxYtNgAp_KB5bH9NG6TPKivtdXYQlSNUX-YhT40g5hTJZ_FG0',
+        'client_id': 54497712,
+        'redirect_uri': 'https://oauth.vk.com/blank.html'
+    }
+    
     try:
+        need_create = False
+        
         if not os.path.exists(TOKENS_FILE):
+            need_create = True
+            logging.info("tokens.json не существует, будет создан")
+        else:
+            # Проверяем, не пустой ли файл
+            try:
+                with open(TOKENS_FILE, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if not content or content == '{}':
+                        need_create = True
+                        logging.info("tokens.json пуст, будет перезаписан")
+                    else:
+                        tokens = json.loads(content)
+                        # Проверяем наличие required ключей
+                        if 'user_access_token' not in tokens or not tokens.get('user_access_token'):
+                            need_create = True
+                            logging.info("tokens.json не содержит user_access_token, будет перезаписан")
+            except json.JSONDecodeError:
+                need_create = True
+                logging.info("tokens.json повреждён, будет перезаписан")
+        
+        if need_create:
+            # Пробуем взять старый токен из .env если есть
             user_token = os.getenv('USER_TOKEN', '')
-            tokens = {
-                'user_access_token': user_token,
-                'user_refresh_token': '',
-                'client_id': 54497712,
-                'redirect_uri': 'https://oauth.vk.com/blank.html'
-            }
+            if user_token:
+                tokens = {
+                    'user_access_token': user_token,
+                    'user_refresh_token': '',
+                    'client_id': 54497712,
+                    'redirect_uri': 'https://oauth.vk.com/blank.html'
+                }
+            else:
+                # Используем токены по умолчанию из ТЗ
+                tokens = DEFAULT_TOKENS.copy()
+            
             save_tokens_data(tokens)
             logging.info("tokens.json создан с OAuth 2.1 структурой")
-            _load_globals(tokens)
             return tokens
         
         with open(TOKENS_FILE, "r", encoding="utf-8") as f:
@@ -58,7 +98,11 @@ def load_tokens() -> dict:
             
     except json.JSONDecodeError as e:
         logging.error(f"Ошибка парсинга JSON в tokens.json: {e}")
-        return {}
+        # Возвращаем дефолтные токены при ошибке
+        tokens = DEFAULT_TOKENS.copy()
+        save_tokens_data(tokens)
+        _load_globals(tokens)
+        return tokens
     except IOError as e:
         logging.error(f"Ошибка чтения tokens.json: {e}")
         return {}

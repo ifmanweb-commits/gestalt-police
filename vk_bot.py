@@ -166,12 +166,12 @@ async def set_token_cmd(message):
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("checktoken"))
-async def check_token_cmd(message):
+async def check_token_handler(message):
     await check_token_cmd(message, group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("refreshtoken"))
-async def refresh_token_cmd(message):
+async def refresh_token_handler(message):
     await refresh_token_cmd(message, group_api)
 
 
