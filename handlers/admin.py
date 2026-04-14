@@ -14,6 +14,7 @@ from services.vk_api import resolve_user_id
 from services.spam_check import is_user_admin_in_chat, _update_admin_cache, _is_admin_cache_valid, _get_admin_cache_record
 from services.tokens import update_user_tokens, get_user_access_token, get_user_refresh_token
 from services import api_instances
+from services.api_instances import check_token_validity, refresh_user_api, handle_token_refresh
 from config import GROUP_ID
 from tinydb import Query
 

@@ -172,7 +172,7 @@ custom_commands.json
 experts.json
 questions.json
 admin_cache.json
-# tokens.json
+tokens.json
 *.log
 
 # Logs directory
