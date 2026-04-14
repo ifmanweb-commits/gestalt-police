@@ -85,17 +85,16 @@ async def create_wall_post(api: API, question_text: str, expert_answer: dict) ->
         logging.warning(f"Текст поста превышает лимит VK ({len(content)} символов)")
         return -1
     
-    return await _post_with_retry(api, owner_id=-GROUP_ID, from_group=1, message=content, is_create=True)
+    return await _post_with_retry(api, owner_id=-GROUP_ID, message=content, is_create=True)
 
 
-async def _post_with_retry(api: API, owner_id: int, from_group: int, message: str, is_create: bool = True, post_id: int = None) -> int:
+async def _post_with_retry(api: API, owner_id: int, message: str, is_create: bool = True, post_id: int = None) -> int:
     """
     Публикует пост с автоматическим обновлением токена при ошибке авторизации.
     
     Args:
         api: VK API экземпляр
         owner_id: ID владельца
-        from_group: Флаг публикации от группы
         message: Текст поста
         is_create: True для создания поста, False для редактирования
         post_id: ID поста для редактирования
@@ -107,7 +106,6 @@ async def _post_with_retry(api: API, owner_id: int, from_group: int, message: st
         if is_create:
             response = await api.wall.post(
                 owner_id=owner_id,
-                from_group=from_group,
                 message=message
             )
             post_id = response.post_id
@@ -134,7 +132,6 @@ async def _post_with_retry(api: API, owner_id: int, from_group: int, message: st
                 if is_create:
                     response = await api.wall.post(
                         owner_id=owner_id,
-                        from_group=from_group,
                         message=message
                     )
                     post_id = response.post_id
@@ -186,4 +183,4 @@ async def update_wall_post(api: API, post_id: int, question_text: str, expert_an
     # owner_id со знаком минус для группы
     owner_id = -GROUP_ID
     
-    return await _post_with_retry(api, owner_id=owner_id, from_group=1, message=content, is_create=False, post_id=post_id)
+    return await _post_with_retry(api, owner_id=owner_id, message=content, is_create=False, post_id=post_id)

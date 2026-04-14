@@ -422,7 +422,6 @@ async def test_post_cmd(message: Message, api: API):
         
         response = await api_instances.user_api.wall.post(
             owner_id=owner_id,
-            from_group=1,
             message="🧪 Тестовый пост\n\nЭто тестовое сообщение для проверки работы бота."
         )
         
