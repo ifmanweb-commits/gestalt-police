@@ -11,7 +11,7 @@ from vkbottle import Bot
 load_dotenv()
 
 # Импортируем экземпляры API (разделение токенов)
-from services.api_instances import group_api, user_api
+from services.api_instances import group_api, user_api, init_apis
 
 # Токен для инициализации бота (групповой)
 BOT_TOKEN = os.getenv('VK_TOKEN')
@@ -37,7 +37,7 @@ from handlers.admin import (
     register_chat, unregister_chat, list_chats,
     ruleslist,
     setrule, delrule, expert_reg, expert_del, expert_list,
-    get_chat_id, refresh_admin_cache
+    get_chat_id, refresh_admin_cache, set_token, check_token_cmd
 )
 from services.custom_commands import load_custom_commands
 
@@ -96,6 +96,8 @@ async def help_command(message):
 /expertlist - Показать список всех экспертов
 /chatid - Получить ID текущего чата (работает в групповых чатах для администраторов)
 /refresh_admins - Принудительно обновить кэш администраторов чата
+/settoken <токен> - Обновить пользовательский токен
+/checktoken - Проверить текущий токен
 /help - Показать справку
 """
     await message.answer(help_text)
@@ -156,6 +158,16 @@ async def refresh_admins_cmd(message):
     await refresh_admin_cache(message, group_api)
 
 
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("settoken"))
+async def set_token_cmd(message):
+    await set_token(message, group_api)
+
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("checktoken"))
+async def check_token_cmd(message):
+    await check_token_cmd(message, group_api)
+
+
 # ============================================================================
 # ЛИЧНЫЕ СООБЩЕНИЯ (ВСЕ ПОЛЬЗОВАТЕЛИ)
 # ============================================================================
@@ -212,6 +224,12 @@ async def group_handler(message):
 
 def main():
     print("VK Bot is working")
+    
+    # Загрузка токенов и инициализация API
+    from services.tokens import load_tokens
+    load_tokens()
+    init_apis()
+    logging.info("API клиенты инициализированы")
     
     # Загрузка пользовательских команд из файла
     load_custom_commands()
