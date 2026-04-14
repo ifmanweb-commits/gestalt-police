@@ -12,8 +12,8 @@ from models.experts_db import add_expert, remove_expert, get_expert_list
 from services.custom_commands import add_command, remove_command, get_all_commands, save_custom_commands
 from services.vk_api import resolve_user_id
 from services.spam_check import is_user_admin_in_chat, _update_admin_cache, _is_admin_cache_valid, _get_admin_cache_record
-from services.tokens import update_user_token, get_user_token
-from services.api_instances import check_token_validity, refresh_user_api
+from services.tokens import update_user_tokens, get_user_access_token, get_user_refresh_token
+from services.api_instances import check_token_validity, refresh_user_api, handle_token_refresh
 from tinydb import Query
 
 logger = logging.getLogger(__name__)
@@ -308,7 +308,7 @@ async def refresh_admin_cache(message: Message, api: API):
 
 async def set_token(message: Message, api: API):
     """
-    /settoken <новый_токен> - Обновить пользовательский токен.
+    /settoken <новый_токен> - Обновить пользовательский access_token.
     Работает только для суперпользователя.
     """
     from config import SUPERUSER_ID
@@ -321,7 +321,7 @@ async def set_token(message: Message, api: API):
     if len(args) < 2:
         await message.answer(
             "❌ Не указан новый токен.\n"
-            "Используйте: /settoken <vk1.a.xxxxx>"
+            "Используйте: /settoken <vk2.a.xxxxx>"
         )
         return
     
@@ -334,7 +334,7 @@ async def set_token(message: Message, api: API):
         return
     
     # Обновляем токен в tokens.json
-    if update_user_token(new_token):
+    if update_user_tokens(new_token):
         # Пересоздаём API клиент с новым токеном
         refresh_user_api(new_token)
         await message.answer("✅ Токен успешно обновлён и применён без перезапуска бота.")
@@ -344,7 +344,7 @@ async def set_token(message: Message, api: API):
 
 async def check_token_cmd(message: Message, api: API):
     """
-    /checktoken - Проверить текущий пользовательский токен.
+    /checktoken - Проверить текущий пользовательский access_token.
     Работает только для суперпользователя.
     """
     from config import SUPERUSER_ID
@@ -353,9 +353,9 @@ async def check_token_cmd(message: Message, api: API):
         await message.answer("❌ Эта команда доступна только суперпользователю.")
         return
     
-    current_token = get_user_token()
+    current_token = get_user_access_token()
     if not current_token:
-        await message.answer("❌ Пользовательский токен не найден.")
+        await message.answer("❌ Пользовательский access_token не найден.")
         return
     
     is_valid = await check_token_validity(current_token)
@@ -363,3 +363,25 @@ async def check_token_cmd(message: Message, api: API):
         await message.answer("✅ Токен работает корректно.")
     else:
         await message.answer("❌ Токен недействителен. Используйте /settoken для обновления.")
+
+
+async def refresh_token_cmd(message: Message, api: API):
+    """
+    /refreshtoken - Обновить access_token через refresh_token.
+    Работает только для суперпользователя.
+    """
+    from config import SUPERUSER_ID
+    
+    if message.from_id != SUPERUSER_ID:
+        await message.answer("❌ Эта команда доступна только суперпользователю.")
+        return
+    
+    refresh_token = get_user_refresh_token()
+    if not refresh_token:
+        await message.answer("❌ refresh_token не найден.")
+        return
+    
+    if await handle_token_refresh():
+        await message.answer("✅ access_token успешно обновлён через refresh_token.")
+    else:
+        await message.answer("❌ Не удалось обновить токен. Проверьте refresh_token.")
