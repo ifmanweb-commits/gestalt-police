@@ -311,6 +311,9 @@ async def set_token(message: Message, api: API):
     """
     /settoken <новый_токен> - Обновить пользовательский access_token.
     Работает только для суперпользователя.
+    
+    Пример использования:
+    /settoken vk2.a.TC9tl31q7ig21luLLIgK9U4tUXzyUVQOKcobiO8WnEMB9cGTmm5EMh2TfLAZ24mf_0F_iSEz0Jeb5SQTWpygtQKCg_lWVhNE6IcTvcrEil2g0g_-UZeE5W7MVgySlpGl5BP5BnnPJVhIpQVrUgb80YLUokWWHfseTpExUVKf6JRXvWAbrwVo1oHIZ0WxNGsa6lLZHSKXE64W0B0ohG3fS2QqGAPnHYE9VwdhKAcI0OtI66Xz2s3ZQRoibqd9R4I_
     """
     from config import SUPERUSER_ID
     
@@ -318,15 +321,25 @@ async def set_token(message: Message, api: API):
         await message.answer("❌ Эта команда доступна только суперпользователю.")
         return
     
-    args = message.text.split()
-    if len(args) < 2:
+    # Получаем полный текст команды
+    full_text = message.text.strip()
+    
+    # Парсим команду: /settoken <токен>
+    parts = full_text.split(maxsplit=1)
+    if len(parts) < 2:
         await message.answer(
-            "❌ Не указан новый токен.\n"
-            "Используйте: /settoken <vk2.a.xxxxx>"
+            "❌ Не указан новый токен.\n\n"
+            "Используйте: /settoken <vk2.a.xxxxx>\n\n"
+            "Пример:\n"
+            "/settoken vk2.a.TC9tl31q7ig21luLLIgK9U4tUXzyUVQOKcobiO8WnEMB9cGTmm5EMh2TfLAZ24mf_0F_iSEz0Jeb5SQTWpygtQKCg_lWVhNE6IcTvcrEil2g0g_-UZeE5W7MVgySlpGl5BP5BnnPJVhIpQVrUgb80YLUokWWHfseTpExUVKf6JRXvWAbrwVo1oHIZ0WxNGsa6lLZHSKXE64W0B0ohG3fS2QqGAPnHYE9VwdhKAcI0OtI66Xz2s3ZQRoibqd9R4I_"
         )
         return
     
-    new_token = args[1].strip()
+    new_token = parts[1].strip()
+    
+    if not new_token:
+        await message.answer("❌ Токен не может быть пустым.")
+        return
     
     # Проверяем валидность токена
     is_valid = await check_token_validity(new_token)

@@ -2,9 +2,13 @@
 Сервис для публикации постов на стене группы VK.
 
 Использует user_api (пользовательский токен) для публикации постов от имени сообщества.
+
+При получении ошибки 5 (User authorization failed) автоматически обновляет
+access_token через refresh_token и повторяет запрос.
 """
 import logging
 from vkbottle import API
+from vkbottle.exception_factory import VKAPIError
 from config import GROUP_ID
 
 
@@ -81,25 +85,79 @@ async def create_wall_post(api: API, question_text: str, expert_answer: dict) ->
         logging.warning(f"Текст поста превышает лимит VK ({len(content)} символов)")
         return -1
     
+    return await _post_with_retry(api, owner_id=-GROUP_ID, from_group=1, message=content, is_create=True)
+
+
+async def _post_with_retry(api: API, owner_id: int, from_group: int, message: str, is_create: bool = True, post_id: int = None) -> int:
+    """
+    Публикует пост с автоматическим обновлением токена при ошибке авторизации.
+    
+    Args:
+        api: VK API экземпляр
+        owner_id: ID владельца
+        from_group: Флаг публикации от группы
+        message: Текст поста
+        is_create: True для создания поста, False для редактирования
+        post_id: ID поста для редактирования
+        
+    Returns:
+        int: ID созданного поста или -1 если ошибка
+    """
     try:
-        # owner_id со знаком минус для группы
-        owner_id = -GROUP_ID
+        if is_create:
+            response = await api.wall.post(
+                owner_id=owner_id,
+                from_group=from_group,
+                message=message
+            )
+            post_id = response.post_id
+            logging.info(f"Создан пост на стене группы: {post_id}")
+            return post_id
+        else:
+            await api.wall.edit(
+                owner_id=owner_id,
+                post_id=post_id,
+                message=message
+            )
+            logging.info(f"Обновлён пост на стене группы: {post_id}")
+            return True
+            
+    except VKAPIError(5) as e:
+        # User authorization failed - пробуем обновить токен
+        logging.warning(f"Получена ошибка авторизации (код 5), пробуем обновить токен...")
         
-        # Публикация от имени сообщества (from_group=1)
-        # Требуется user_api с правами на публикацию от имени сообщества
-        response = await api.wall.post(
-            owner_id=owner_id,
-            from_group=1,
-            message=content
-        )
-        
-        post_id = response.post_id
-        logging.info(f"Создан пост на стене группы: {post_id}")
-        return post_id
-        
+        from services.api_instances import handle_token_refresh
+        if await handle_token_refresh():
+            logging.info("Токен обновлён, повторяем запрос...")
+            # Повторяем запрос с обновлённым токеном
+            try:
+                if is_create:
+                    response = await api.wall.post(
+                        owner_id=owner_id,
+                        from_group=from_group,
+                        message=message
+                    )
+                    post_id = response.post_id
+                    logging.info(f"Создан пост на стене группы (после обновления токена): {post_id}")
+                    return post_id
+                else:
+                    await api.wall.edit(
+                        owner_id=owner_id,
+                        post_id=post_id,
+                        message=message
+                    )
+                    logging.info(f"Обновлён пост на стене группы (после обновления токена): {post_id}")
+                    return True
+            except Exception as retry_error:
+                logging.error(f"Ошибка при повторном запросе: {retry_error}")
+                return -1 if is_create else False
+        else:
+            logging.error("Не удалось обновить токен")
+            return -1 if is_create else False
+            
     except Exception as e:
-        logging.error(f"Ошибка при создании поста на стене: {e}")
-        return -1
+        logging.error(f"Ошибка при {'создании' if is_create else 'редактировании'} поста на стене: {e}")
+        return -1 if is_create else False
 
 
 async def update_wall_post(api: API, post_id: int, question_text: str, expert_answers: list) -> bool:
@@ -125,20 +183,7 @@ async def update_wall_post(api: API, post_id: int, question_text: str, expert_an
         logging.warning(f"Текст поста превышает лимит VK после добавления ответа ({len(content)} символов)")
         return False
     
-    try:
-        # owner_id со знаком минус для группы
-        owner_id = -GROUP_ID
-        
-        # Редактирование от имени сообщества (требуется user_api)
-        await api.wall.edit(
-            owner_id=owner_id,
-            post_id=post_id,
-            message=content
-        )
-        
-        logging.info(f"Обновлён пост на стене группы: {post_id}")
-        return True
-        
-    except Exception as e:
-        logging.error(f"Ошибка при редактировании поста на стене: {e}")
-        return False
+    # owner_id со знаком минус для группы
+    owner_id = -GROUP_ID
+    
+    return await _post_with_retry(api, owner_id=owner_id, from_group=1, message=content, is_create=False, post_id=post_id)
