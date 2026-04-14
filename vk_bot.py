@@ -37,7 +37,7 @@ from handlers.admin import (
     register_chat, unregister_chat, list_chats,
     ruleslist,
     setrule, delrule, expert_reg, expert_del, expert_list,
-    get_chat_id, refresh_admin_cache, set_token, check_token_cmd, refresh_token_cmd
+    get_chat_id, refresh_admin_cache, set_token, check_token_cmd, refresh_token_cmd, test_post_cmd
 )
 from services.custom_commands import load_custom_commands
 
@@ -99,6 +99,7 @@ async def help_command(message):
 /settoken <токен> - Обновить пользовательский access_token
 /checktoken - Проверить текущий токен
 /refreshtoken - Обновить токен через refresh_token
+/testpost - Опубликовать тестовый пост на стене группы
 /help - Показать справку
 """
     await message.answer(help_text)
@@ -172,6 +173,11 @@ async def check_token_cmd(message):
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("refreshtoken"))
 async def refresh_token_cmd(message):
     await refresh_token_cmd(message, group_api)
+
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("testpost"))
+async def test_post_cmd_handler(message):
+    await test_post_cmd(message, group_api)
 
 
 # ============================================================================

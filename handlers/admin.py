@@ -13,7 +13,8 @@ from services.custom_commands import add_command, remove_command, get_all_comman
 from services.vk_api import resolve_user_id
 from services.spam_check import is_user_admin_in_chat, _update_admin_cache, _is_admin_cache_valid, _get_admin_cache_record
 from services.tokens import update_user_tokens, get_user_access_token, get_user_refresh_token
-from services.api_instances import check_token_validity, refresh_user_api, handle_token_refresh
+from services.api_instances import check_token_validity, refresh_user_api, handle_token_refresh, user_api
+from config import GROUP_ID
 from tinydb import Query
 
 logger = logging.getLogger(__name__)
@@ -385,3 +386,35 @@ async def refresh_token_cmd(message: Message, api: API):
         await message.answer("✅ access_token успешно обновлён через refresh_token.")
     else:
         await message.answer("❌ Не удалось обновить токен. Проверьте refresh_token.")
+
+
+async def test_post_cmd(message: Message, api: API):
+    """
+    /testpost - Опубликовать тестовый пост на стене группы.
+    Работает только для суперпользователя.
+    """
+    from config import SUPERUSER_ID
+    
+    if message.from_id != SUPERUSER_ID:
+        await message.answer("❌ Эта команда доступна только суперпользователю.")
+        return
+    
+    if user_api is None:
+        await message.answer("❌ user_api не инициализирован. Проверьте tokens.json.")
+        return
+    
+    try:
+        owner_id = -GROUP_ID
+        
+        response = await user_api.wall.post(
+            owner_id=owner_id,
+            from_group=1,
+            message="🧪 Тестовый пост\n\nЭто тестовое сообщение для проверки работы бота."
+        )
+        
+        post_id = response.post_id
+        await message.answer(f"✅ Тестовый пост успешно опубликован!\n\nID поста: {post_id}")
+        
+    except Exception as e:
+        logging.error(f"Ошибка при публикации тестового поста: {e}")
+        await message.answer(f"❌ Ошибка при публикации поста: {e}")
