@@ -12,9 +12,9 @@ from models.experts_db import add_expert, remove_expert, get_expert_list
 from services.custom_commands import add_command, remove_command, get_all_commands, save_custom_commands
 from services.vk_api import resolve_user_id
 from services.spam_check import is_user_admin_in_chat, _update_admin_cache, _is_admin_cache_valid, _get_admin_cache_record
-from services.tokens import update_user_tokens, get_user_access_token, get_user_refresh_token
+from services.tokens import get_wall_token, update_wall_token
 from services import api_instances
-from services.api_instances import check_token_validity, refresh_user_api, handle_token_refresh
+from services.api_instances import check_token_validity
 from config import GROUP_ID
 from tinydb import Query
 
@@ -308,16 +308,11 @@ async def refresh_admin_cache(message: Message, api: API):
         await message.answer("⚠️ Не удалось получить список администраторов. Проверьте права бота в чате.")
 
 
-async def set_token(message: Message, api: API):
+async def set_wall_token(message: Message, api: API):
     """
-    /settoken <новый_токен> - Обновить пользовательский access_token.
+    /setwalltoken <новый_токен> - Обновить wall_token для публикации на стене.
     Работает только для суперпользователя.
-    
-    Пример использования:
-    /settoken vk2.a.TC9tl31q7ig21luLLIgK9U4tUXzyUVQOKcobiO8WnEMB9cGTmm5EMh2TfLAZ24mf_0F_iSEz0Jeb5SQTWpygtQKCg_lWVhNE6IcTvcrEil2g0g_-UZeE5W7MVgySlpGl5BP5BnnPJVhIpQVrUgb80YLUokWWHfseTpExUVKf6JRXvWAbrwVo1oHIZ0WxNGsa6lLZHSKXE64W0B0ohG3fS2QqGAPnHYE9VwdhKAcI0OtI66Xz2s3ZQRoibqd9R4I_
     """
-    from config import SUPERUSER_ID
-    
     if message.from_id != SUPERUSER_ID:
         await message.answer("❌ Эта команда доступна только суперпользователю.")
         return
@@ -325,14 +320,12 @@ async def set_token(message: Message, api: API):
     # Получаем полный текст команды
     full_text = message.text.strip()
     
-    # Парсим команду: /settoken <токен>
+    # Парсим команду: /setwalltoken <токен>
     parts = full_text.split(maxsplit=1)
     if len(parts) < 2:
         await message.answer(
             "❌ Не указан новый токен.\n\n"
-            "Используйте: /settoken <vk2.a.xxxxx>\n\n"
-            "Пример:\n"
-            "/settoken vk2.a.TC9tl31q7ig21luLLIgK9U4tUXzyUVQOKcobiO8WnEMB9cGTmm5EMh2TfLAZ24mf_0F_iSEz0Jeb5SQTWpygtQKCg_lWVhNE6IcTvcrEil2g0g_-UZeE5W7MVgySlpGl5BP5BnnPJVhIpQVrUgb80YLUokWWHfseTpExUVKf6JRXvWAbrwVo1oHIZ0WxNGsa6lLZHSKXE64W0B0ohG3fS2QqGAPnHYE9VwdhKAcI0OtI66Xz2s3ZQRoibqd9R4I_"
+            "Используйте: /setwalltoken <vk1.a.xxxxx>"
         )
         return
     
@@ -349,57 +342,33 @@ async def set_token(message: Message, api: API):
         return
     
     # Обновляем токен в tokens.json
-    if update_user_tokens(new_token):
+    if update_wall_token(new_token):
         # Пересоздаём API клиент с новым токеном
-        refresh_user_api(new_token)
-        await message.answer("✅ Токен успешно обновлён и применён без перезапуска бота.")
+        api_instances.wall_api = API(new_token)
+        await message.answer("✅ wall_token успешно обновлён и применён без перезапуска бота.")
     else:
         await message.answer("❌ Ошибка при сохранении токена.")
 
 
-async def check_token_cmd(message: Message, api: API):
+async def check_wall_token_cmd(message: Message, api: API):
     """
-    /checktoken - Проверить текущий пользовательский access_token.
+    /checkwalltoken - Проверить текущий wall_token.
     Работает только для суперпользователя.
     """
-    from config import SUPERUSER_ID
-    
     if message.from_id != SUPERUSER_ID:
         await message.answer("❌ Эта команда доступна только суперпользователю.")
         return
     
-    current_token = get_user_access_token()
+    current_token = get_wall_token()
     if not current_token:
-        await message.answer("❌ Пользовательский access_token не найден.")
+        await message.answer("❌ wall_token не найден.")
         return
     
     is_valid = await check_token_validity(current_token)
     if is_valid:
         await message.answer("✅ Токен работает корректно.")
     else:
-        await message.answer("❌ Токен недействителен. Используйте /settoken для обновления.")
-
-
-async def refresh_token_cmd(message: Message, api: API):
-    """
-    /refreshtoken - Обновить access_token через refresh_token.
-    Работает только для суперпользователя.
-    """
-    from config import SUPERUSER_ID
-    
-    if message.from_id != SUPERUSER_ID:
-        await message.answer("❌ Эта команда доступна только суперпользователю.")
-        return
-    
-    refresh_token = get_user_refresh_token()
-    if not refresh_token:
-        await message.answer("❌ refresh_token не найден.")
-        return
-    
-    if await handle_token_refresh():
-        await message.answer("✅ access_token успешно обновлён через refresh_token.")
-    else:
-        await message.answer("❌ Не удалось обновить токен. Проверьте refresh_token.")
+        await message.answer("❌ Токен недействителен. Используйте /setwalltoken для обновления.")
 
 
 async def test_post_cmd(message: Message, api: API):
@@ -407,20 +376,18 @@ async def test_post_cmd(message: Message, api: API):
     /testpost - Опубликовать тестовый пост на стене группы.
     Работает только для суперпользователя.
     """
-    from config import SUPERUSER_ID
-    
     if message.from_id != SUPERUSER_ID:
         await message.answer("❌ Эта команда доступна только суперпользователю.")
         return
     
-    if api_instances.user_api is None:
-        await message.answer("❌ user_api не инициализирован. Проверьте tokens.json.")
+    if api_instances.wall_api is None:
+        await message.answer("❌ wall_api не инициализирован. Проверьте tokens.json.")
         return
     
     try:
         owner_id = -GROUP_ID
         
-        response = await api_instances.user_api.wall.post(
+        response = await api_instances.wall_api.wall.post(
             owner_id=owner_id,
             message="🧪 Тестовый пост\n\nЭто тестовое сообщение для проверки работы бота."
         )

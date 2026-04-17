@@ -38,7 +38,7 @@ from handlers.admin import (
     register_chat, unregister_chat, list_chats,
     ruleslist,
     setrule, delrule, expert_reg, expert_del, expert_list,
-    get_chat_id, refresh_admin_cache, set_token, check_token_cmd, refresh_token_cmd, test_post_cmd
+    get_chat_id, refresh_admin_cache, set_wall_token, check_wall_token_cmd, test_post_cmd
 )
 from services.custom_commands import load_custom_commands
 
@@ -60,8 +60,8 @@ logging.basicConfig(
 logging.info("Логирование инициализировано")
 
 # Инициализация API и бота
-# group_api используется для модерации, команд, вопросов
-# user_api используется только для публикации постов на стене
+# group_api используется для модерации, команд, вопросов (группа "Гештальт-полиция")
+# wall_api используется для публикации постов на стене (группа "Зона роста")
 bot = Bot(BOT_TOKEN)
 
 # ============================================================================
@@ -97,9 +97,8 @@ async def help_command(message):
 /expertlist - Показать список всех экспертов
 /chatid - Получить ID текущего чата (работает в групповых чатах для администраторов)
 /refresh_admins - Принудительно обновить кэш администраторов чата
-/settoken <токен> - Обновить пользовательский access_token
-/checktoken - Проверить текущий токен
-/refreshtoken - Обновить токен через refresh_token
+/setwalltoken <токен> - Обновить wall_token для публикации на стене
+/checkwalltoken - Проверить текущий wall_token
 /testpost - Опубликовать тестовый пост на стене группы
 /help - Показать справку
 """
@@ -161,24 +160,19 @@ async def refresh_admins_cmd(message):
     await refresh_admin_cache(message, api_instances.group_api)
 
 
-@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("settoken"))
-async def set_token_cmd(message):
-    await set_token(message, api_instances.group_api)
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("setwalltoken"))
+async def set_wall_token_cmd(message):
+    await set_wall_token(message, api_instances.group_api)
 
 
-@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("checktoken"))
-async def check_token_handler(message):
-    await check_token_cmd(message, api_instances.group_api)
-
-
-@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("refreshtoken"))
-async def refresh_token_handler(message):
-    await refresh_token_cmd(message, api_instances.group_api)
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("checkwalltoken"))
+async def check_wall_token_handler(message):
+    await check_wall_token_cmd(message, api_instances.group_api)
 
 
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("testpost"))
 async def test_post_cmd_handler(message):
-    await test_post_cmd(message, api_instances.group_api)
+    await test_post_cmd(message, api_instances.wall_api)
 
 
 # ============================================================================
@@ -220,7 +214,7 @@ async def group_handler(message):
     3. Антиспам
     """
     # 1. Ответ эксперта
-    if await handle_expert_answer(message, api_instances.group_api, api_instances.user_api):
+    if await handle_expert_answer(message, api_instances.group_api, api_instances.wall_api):
         return
     
     # 2. !команда

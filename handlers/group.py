@@ -17,7 +17,7 @@ from models.questions_db import add_expert_answer, get_question_by_id, get_quest
 from tinydb import Query
 
 
-async def handle_expert_answer(message: Message, group_api: API, user_api: API) -> bool:
+async def handle_expert_answer(message: Message, group_api: API, wall_api: API) -> bool:
     """
     Обработка ответов экспертов в беседе экспертов.
     Эксперт отвечает на сообщение бота → бот отправляет ответ пользователю.
@@ -25,7 +25,7 @@ async def handle_expert_answer(message: Message, group_api: API, user_api: API) 
     Args:
         message: Сообщение VK
         group_api: VK API экземпляр (групповой токен) для отправки сообщений
-        user_api: VK API экземпляр (пользовательский токен) для публикации постов
+        wall_api: VK API экземпляр (wall_token) для публикации постов на стене
         
     Returns:
         bool: True если сообщение обработано
@@ -82,10 +82,10 @@ async def handle_expert_answer(message: Message, group_api: API, user_api: API) 
                 post_id = get_question_post_id(question_id)
                 
                 if post_id is None:
-                    # Поста нет - создаём новый (используем user_api)
+                    # Поста нет - создаём новый (используем wall_api)
                     logging.info(f"Создание нового поста для вопроса #{question_id}")
                     new_post_id = await create_wall_post(
-                        api=user_api,
+                        api=wall_api,
                         question_text=question_text,
                         expert_answer={
                             'expert_id': message.from_id,
@@ -100,10 +100,10 @@ async def handle_expert_answer(message: Message, group_api: API, user_api: API) 
                     else:
                         logging.warning(f"Не удалось создать пост для вопроса #{question_id}")
                 else:
-                    # Пост есть - редактируем его, добавляя новый ответ (используем user_api)
+                    # Пост есть - редактируем его, добавляя новый ответ (используем wall_api)
                     logging.info(f"Редактирование поста {post_id} для вопроса #{question_id}")
                     updated = await update_wall_post(
-                        api=user_api,
+                        api=wall_api,
                         post_id=post_id,
                         question_text=question_text,
                         expert_answers=expert_answers
