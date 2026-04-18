@@ -181,7 +181,7 @@ async def create_comment(api: API, post_id: int, expert_answer: dict) -> int:
     content = format_comment_content(expert_answer)
     
     try:
-        response = await api.wall.createComment(
+        response = await api.wall.create_comment(
             owner_id=-GROUP_ID,
             post_id=post_id,
             message=content

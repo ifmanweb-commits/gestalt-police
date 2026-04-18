@@ -138,11 +138,10 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
             )
             logging.info(f"Уведомление отправлено пользователю {target_user_id}")
             
-            # Уведомляем эксперта об отправке
+            # Уведомляем эксперта об отправке (без reply_to, так как это может быть другой чат)
             await group_api.messages.send(
                 peer_id=message.peer_id,
                 message=f"✅ Ответ отправлен пользователю https://vk.com/id{target_user_id}",
-                reply_to=message.conversation_message_id,
                 random_id=random.randint(1, 2**31)
             )
         except Exception as e:
