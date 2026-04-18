@@ -119,11 +119,13 @@ def add_expert_answer(question_id: int, expert_id: int, expert_name: str,
     Returns:
         bool: True если ответ успешно добавлен
     """
+    import logging
     db = get_questions_db()
     Question = Query()
     
     question = db.get(Question.id == question_id)
     if not question:
+        logging.error(f"Вопрос #{question_id} не найден в БД")
         return False
     
     if 'expert_answers' not in question:
@@ -138,7 +140,11 @@ def add_expert_answer(question_id: int, expert_id: int, expert_name: str,
     }
     
     question['expert_answers'].append(answer_data)
-    db.update(question, Question.id == question_id)
+    
+    # Используем явное обновление только поля expert_answers
+    db.update({'expert_answers': question['expert_answers']}, Question.id == question_id)
+    
+    logging.info(f"Ответ эксперта добавлен в вопрос #{question_id}. Всего ответов: {len(question['expert_answers'])}")
     
     return True
 

@@ -77,10 +77,11 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
             if question_data:
                 question_text = question_data.get('question_text', '')
                 expert_answers = question_data.get('expert_answers', [])
+                post_id = question_data.get('post_id')
+                
+                logging.info(f"Вопрос #{question_id}: вопрос='{question_text[:50]}...', ответов={len(expert_answers)}, post_id={post_id}")
                 
                 # Проверяем, есть ли уже пост для этого вопроса
-                post_id = get_question_post_id(question_id)
-                
                 if post_id is None:
                     # Поста нет - создаём новый (используем wall_api)
                     logging.info(f"Создание нового поста для вопроса #{question_id}")
@@ -101,7 +102,7 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                         logging.warning(f"Не удалось создать пост для вопроса #{question_id}")
                 else:
                     # Пост есть - редактируем его, добавляя новый ответ (используем wall_api)
-                    logging.info(f"Редактирование поста {post_id} для вопроса #{question_id}")
+                    logging.info(f"Редактирование поста {post_id} для вопроса #{question_id}. Ответов в посте: {len(expert_answers)}")
                     updated = await update_wall_post(
                         api=wall_api,
                         post_id=post_id,
