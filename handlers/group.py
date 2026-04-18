@@ -11,7 +11,7 @@ from config import EXPERTS_CHAT_ID, GROUP_ID
 from services.custom_commands import get_command_response
 from services.spam_check import perform_spam_check
 from services.vk_api import get_user_name
-from services.wall_post import create_wall_post, update_wall_post
+from services.wall_post import create_wall_post, create_comment
 from database import get_bot_db
 from models.questions_db import add_expert_answer, get_question_by_id, get_question_full_data, update_question_post_id, get_question_post_id
 from tinydb import Query
@@ -83,8 +83,8 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                 
                 # Проверяем, есть ли уже пост для этого вопроса
                 if post_id is None:
-                    # Поста нет - создаём новый (используем wall_api)
-                    logging.info(f"Создание нового поста для вопроса #{question_id}")
+                    # Первый ответ - создаём новый пост (используем wall_api)
+                    logging.info(f"Первый ответ эксперта - создание поста для вопроса #{question_id}")
                     new_post_id = await create_wall_post(
                         api=wall_api,
                         question_text=question_text,
@@ -101,18 +101,21 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                     else:
                         logging.warning(f"Не удалось создать пост для вопроса #{question_id}")
                 else:
-                    # Пост есть - редактируем его, добавляя новый ответ (используем wall_api)
-                    logging.info(f"Редактирование поста {post_id} для вопроса #{question_id}. Ответов в посте: {len(expert_answers)}")
-                    updated = await update_wall_post(
+                    # Второй и последующие ответы - создаём комментарий к посту (используем wall_api)
+                    logging.info(f"Ответ эксперта #{len(expert_answers)} - создание комментария к посту {post_id}")
+                    comment_id = await create_comment(
                         api=wall_api,
                         post_id=post_id,
-                        question_text=question_text,
-                        expert_answers=expert_answers
+                        expert_answer={
+                            'expert_id': message.from_id,
+                            'expert_name': expert_name,
+                            'text': message.text
+                        }
                     )
-                    if updated:
-                        logging.info(f"Пост {post_id} успешно обновлён")
+                    if comment_id > 0:
+                        logging.info(f"Комментарий {comment_id} создан к посту {post_id}")
                     else:
-                        logging.warning(f"Не удалось обновить пост {post_id} (возможно, превышен лимит символов)")
+                        logging.warning(f"Не удалось создать комментарий к посту {post_id}")
             
         except Exception as db_error:
             logging.error(f"Ошибка сохранения ответа в БД: {db_error}")

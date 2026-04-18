@@ -46,6 +46,20 @@ def format_post_content(question_text: str, expert_answers: list) -> str:
     return content.strip()
 
 
+def format_comment_content(expert_answer: dict) -> str:
+    """
+    Форматирует контент комментария для публикации.
+    
+    Args:
+        expert_answer: Данные ответа эксперта (expert_id, expert_name, text)
+        
+    Returns:
+        str: Отформатированный контент комментария
+    """
+    expert_link = format_expert_link(expert_answer['expert_id'], expert_answer['expert_name'])
+    return f"{expert_link}:\n{expert_answer['text']}"
+
+
 def is_post_within_limit(content: str) -> bool:
     """
     Проверяет, что контент поста не превышает лимит VK.
@@ -148,3 +162,33 @@ async def update_wall_post(api: API, post_id: int, question_text: str, expert_an
     owner_id = -GROUP_ID
     
     return await _post_with_retry(api, owner_id=owner_id, message=content, is_create=False, post_id=post_id)
+
+
+async def create_comment(api: API, post_id: int, expert_answer: dict) -> int:
+    """
+    Создаёт комментарий к посту на стене группы.
+    
+    ВАЖНО: Используйте wall_api (групповой токен wall_token) для публикации от имени сообщества.
+    
+    Args:
+        api: VK API экземпляр (должен быть wall_api)
+        post_id: ID поста для комментирования
+        expert_answer: Данные ответа эксперта (expert_id, expert_name, text)
+        
+    Returns:
+        int: ID созданного комментария или -1 если ошибка
+    """
+    content = format_comment_content(expert_answer)
+    
+    try:
+        response = await api.wall.createComment(
+            owner_id=-GROUP_ID,
+            post_id=post_id,
+            message=content
+        )
+        comment_id = response.comment_id
+        logging.info(f"Создан комментарий к посту {post_id}: {comment_id}")
+        return comment_id
+    except Exception as e:
+        logging.error(f"Ошибка при создании комментария к посту {post_id}: {e}")
+        return -1
