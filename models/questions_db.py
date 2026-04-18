@@ -171,15 +171,18 @@ def update_question_post_id(question_id: int, post_id: int) -> bool:
     Returns:
         bool: True если успешно обновлено
     """
+    import logging
     db = get_questions_db()
     Question = Query()
     
     question = db.get(Question.id == question_id)
     if not question:
+        logging.error(f"Вопрос #{question_id} не найден в БД для обновления post_id")
         return False
     
-    question['post_id'] = post_id
-    db.update(question, Question.id == question_id)
+    # Используем явное обновление только поля post_id
+    db.update({'post_id': post_id}, Question.id == question_id)
+    logging.info(f"post_id={post_id} сохранён для вопроса #{question_id}")
     return True
 
 
