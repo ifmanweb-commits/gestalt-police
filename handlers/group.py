@@ -173,8 +173,13 @@ async def handle_custom_command(message: Message, api: API) -> bool:
     from services.spam_check import is_user_admin_in_chat
     from models.experts_db import is_expert
     
+    logging.info(f"Проверка команды от user_id={message.from_id} в чате {message.peer_id}")
+    
     is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
+    logging.info(f"is_admin={is_admin}")
+    
     is_expert_user = is_expert(message.from_id)
+    logging.info(f"is_expert={is_expert_user}")
     
     if not (is_admin or is_expert_user):
         logging.info(f"Пользователь {message.from_id} не является администратором или экспертом в чате {message.peer_id}")
