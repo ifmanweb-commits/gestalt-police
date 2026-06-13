@@ -2,6 +2,7 @@
 Обработчики админ-команд для VK бота.
 """
 import logging
+import os
 import re
 from vkbottle import API
 from vkbottle.bot import Message
@@ -369,6 +370,56 @@ async def check_wall_token_cmd(message: Message, api: API):
         await message.answer("✅ Токен работает корректно.")
     else:
         await message.answer("❌ Токен недействителен. Используйте /setwalltoken для обновления.")
+
+
+async def show_logs(message: Message, api: API):
+    """
+    /log [N] - Показать последние N строк логов (по умолчанию 50).
+    Работает только для суперпользователя.
+    """
+    if message.from_id != SUPERUSER_ID:
+        await message.answer("❌ Эта команда доступна только суперпользователю.")
+        return
+
+    # Парсим количество строк
+    args = message.text.split()
+    try:
+        num_lines = int(args[1]) if len(args) > 1 else 50
+    except ValueError:
+        await message.answer("❌ Неверный формат. Используйте: /log [N] (N - число строк)")
+        return
+
+    # Определяем путь к логам
+    log_dir = "logs" if os.path.exists("logs") else "/app/logs"
+    log_file = os.path.join(log_dir, "bot.log")
+
+    if not os.path.exists(log_file):
+        await message.answer("❌ Файл логов не найден.")
+        return
+
+    # Читаем последние N строк
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            all_lines = f.readlines()
+            last_lines = all_lines[-num_lines:] if len(all_lines) > num_lines else all_lines
+            log_content = "".join(last_lines)
+    except Exception as e:
+        await message.answer(f"❌ Ошибка чтения логов: {e}")
+        return
+
+    # VK лимит 4096 символов
+    VK_MAX_LENGTH = 4096
+    header = f"📋 Последние {min(num_lines, len(all_lines))} строк логов:\n\n"
+    
+    full_text = header + log_content
+    
+    if len(full_text) <= VK_MAX_LENGTH:
+        await message.answer(full_text)
+    else:
+        # Обрезаем по лимиту, сохраняя заголовок
+        available = VK_MAX_LENGTH - len(header) - 3  # 3 для "..."
+        truncated = header + log_content[-available:] + "\n... (обрезано по лимиту VK)"
+        await message.answer(truncated)
 
 
 async def test_post_cmd(message: Message, api: API):

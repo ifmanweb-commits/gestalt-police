@@ -38,7 +38,8 @@ from handlers.admin import (
     register_chat, unregister_chat, list_chats,
     ruleslist,
     setrule, delrule, expert_reg, expert_del, expert_list,
-    get_chat_id, refresh_admin_cache, set_wall_token, check_wall_token_cmd, test_post_cmd
+    get_chat_id, refresh_admin_cache, set_wall_token, check_wall_token_cmd, test_post_cmd,
+    show_logs
 )
 from services.custom_commands import load_custom_commands
 
@@ -100,6 +101,7 @@ async def help_command(message):
 /setwalltoken <токен> - Обновить wall_token для публикации на стене
 /checkwalltoken - Проверить текущий wall_token
 /testpost - Опубликовать тестовый пост на стене группы
+/log [N] - Показать последние N строк логов (по умолчанию 50)
 /help - Показать справку
 """
     await message.answer(help_text)
@@ -173,6 +175,11 @@ async def check_wall_token_handler(message):
 @bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("testpost"))
 async def test_post_cmd_handler(message):
     await test_post_cmd(message, api_instances.wall_api)
+
+
+@bot.on.message(IsPrivateRule() & IsSuperuserRule() & CommandRule("log"))
+async def show_logs_handler(message):
+    await show_logs(message, api_instances.group_api)
 
 
 # ============================================================================
