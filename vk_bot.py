@@ -31,7 +31,7 @@ from models.experts_db import init_databases
 from models.questions_db import init_questions_db
 from handlers.private import handle_question, handle_unauthorized
 from handlers.group import (
-    handle_expert_answer, handle_custom_command,
+    handle_expert_answer, handle_ban_command, handle_custom_command,
     handle_antispam
 )
 from handlers.admin import (
@@ -224,11 +224,15 @@ async def group_handler(message):
     if await handle_expert_answer(message, api_instances.group_api, api_instances.wall_api):
         return
     
-    # 2. !команда
+    # 2. !ban (бан пользователя)
+    if await handle_ban_command(message, api_instances.group_api):
+        return
+    
+    # 3. !команда
     if await handle_custom_command(message, api_instances.group_api):
         return
     
-    # 3. Антиспам
+    # 4. Антиспам
     # await handle_antispam(message, api_instances.group_api)  # ЗАКОММЕНТИРОВАНО - проверка на спам отключена
 
 

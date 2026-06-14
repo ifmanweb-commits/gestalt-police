@@ -234,7 +234,6 @@ async def perform_spam_check(message, api: API):
         )
         
         try:
-            await api.messages.delete(peer_id=chat_id, conversation_message_ids=[message.conversation_message_id])
             if chat_id > 2000000000:
                 try:
                     await api.messages.remove_chat_user(chat_id=chat_id, user_id=from_user)
@@ -276,8 +275,6 @@ async def perform_spam_check(message, api: API):
         """
         
         try:
-            await api.messages.delete(peer_id=chat_id, conversation_message_ids=[message.conversation_message_id])
-            
             user_link = f"vk.com/id{from_user}"
             user_display_name = f"user{from_user}"
             

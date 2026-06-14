@@ -150,6 +150,107 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
     return True
 
 
+async def handle_ban_command(message: Message, api: API) -> bool:
+    """
+    Обработка команды !ban в групповых чатах.
+    Банит пользователя, на сообщение которого был ответ.
+    Только для администраторов чата.
+    
+    Args:
+        message: Сообщение VK
+        api: VK API экземпляр
+        
+    Returns:
+        bool: True если сообщение обработано
+    """
+    text = message.text
+    if not text or text.strip().lower() != '!ban':
+        return False
+    
+    if message.from_id < 0:
+        return False
+    
+    # Проверяем, что есть reply_message
+    if not message.reply_message:
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message="❌ Команда !ban должна быть ответом на сообщение пользователя.",
+            random_id=random.randint(1, 2**31)
+        )
+        return True
+    
+    # Проверяем, что вызывающий — администратор
+    from services.spam_check import is_user_admin_in_chat
+    
+    is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
+    if not is_admin:
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message="❌ Только администраторы чата могут использовать !ban",
+            random_id=random.randint(1, 2**31)
+        )
+        return True
+    
+    # Получаем user_id из reply_message
+    target_user_id = message.reply_message.from_id
+    
+    if target_user_id < 0:
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message="❌ Нельзя забанить бота или сообщество.",
+            random_id=random.randint(1, 2**31)
+        )
+        return True
+    
+    # Вычисляем chat_id для removeChatUser
+    chat_id = message.peer_id - 2000000000 if message.peer_id > 2000000000 else None
+    
+    if chat_id is None:
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message="❌ Команда !ban работает только в беседах.",
+            random_id=random.randint(1, 2**31)
+        )
+        return True
+    
+    # Баним пользователя
+    try:
+        # Удаляем пользователя из беседы
+        await api.messages.remove_chat_user(
+            chat_id=chat_id,
+            user_id=target_user_id
+        )
+        
+        # Вносим пользователя в черный список группы
+        try:
+            await api.groups.ban_user(
+                group_id=GROUP_ID,
+                owner_id=target_user_id,
+                reason=0,  # другое
+                comment="Забанен администратором через !ban"
+            )
+            logging.info(f"Пользователь {target_user_id} добавлен в черный список группы {GROUP_ID}")
+        except Exception as ban_err:
+            logging.warning(f"Не удалось добавить пользователя в черный список группы: {ban_err}")
+        
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message=f"✅ Пользователь https://vk.com/id{target_user_id} забанен и добавлен в черный список группы.",
+            random_id=random.randint(1, 2**31)
+        )
+        logging.info(f"Пользователь {target_user_id} забанен в чате {message.peer_id} администратором {message.from_id}")
+        
+    except Exception as e:
+        logging.error(f"Ошибка при бане пользователя {target_user_id}: {e}")
+        await api.messages.send(
+            peer_id=message.peer_id,
+            message=f"❌ Ошибка при бане: {e}",
+            random_id=random.randint(1, 2**31)
+        )
+    
+    return True
+
+
 async def handle_custom_command(message: Message, api: API) -> bool:
     """
     Обработка !команд в групповых чатах.
@@ -188,16 +289,6 @@ async def handle_custom_command(message: Message, api: API) -> bool:
     response = get_command_response(text)
     if not response:
         return False
-    
-    # Удаляем команду
-    try:
-        await api.messages.delete(
-            peer_id=message.peer_id,
-            conversation_message_ids=[message.conversation_message_id]
-        )
-    except Exception as e:
-        logging.error(f"Ошибка при удалении команды: {e}")
-    
     
     # Отправляем ответ
     try:
