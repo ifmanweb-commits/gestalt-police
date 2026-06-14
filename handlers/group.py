@@ -152,7 +152,7 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
 
 async def handle_ban_command(message: Message, api: API) -> bool:
     """
-    Обработка команды !ban в групповых чатах.
+    Обработка команды !бан в групповых чатах.
     Банит пользователя, на сообщение которого был ответ.
     Только для администраторов чата.
     
@@ -164,7 +164,7 @@ async def handle_ban_command(message: Message, api: API) -> bool:
         bool: True если сообщение обработано
     """
     text = message.text
-    if not text or text.strip().lower() != '!ban':
+    if not text or text.strip().lower() != '!бан':
         return False
     
     if message.from_id < 0:
@@ -174,7 +174,7 @@ async def handle_ban_command(message: Message, api: API) -> bool:
     if not message.reply_message:
         await api.messages.send(
             peer_id=message.peer_id,
-            message="❌ Команда !ban должна быть ответом на сообщение пользователя.",
+            message="❌ Команда !бан должна быть ответом на сообщение пользователя.",
             random_id=random.randint(1, 2**31)
         )
         return True
@@ -186,7 +186,7 @@ async def handle_ban_command(message: Message, api: API) -> bool:
     if not is_admin:
         await api.messages.send(
             peer_id=message.peer_id,
-            message="❌ Только администраторы чата могут использовать !ban",
+            message="❌ Только администраторы чата могут использовать !бан",
             random_id=random.randint(1, 2**31)
         )
         return True
@@ -208,7 +208,7 @@ async def handle_ban_command(message: Message, api: API) -> bool:
     if chat_id is None:
         await api.messages.send(
             peer_id=message.peer_id,
-            message="❌ Команда !ban работает только в беседах.",
+            message="❌ Команда !бан работает только в беседах.",
             random_id=random.randint(1, 2**31)
         )
         return True
@@ -227,7 +227,7 @@ async def handle_ban_command(message: Message, api: API) -> bool:
                 group_id=GROUP_ID,
                 owner_id=target_user_id,
                 reason=0,  # другое
-                comment="Забанен администратором через !ban"
+                comment="Забанен администратором через !бан"
             )
             logging.info(f"Пользователь {target_user_id} добавлен в черный список группы {GROUP_ID}")
         except Exception as ban_err:
