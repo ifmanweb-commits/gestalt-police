@@ -15,7 +15,7 @@ def get_superuser_id() -> int:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
                 superuser_id = config.get('superuser_id')
-                logger.info(f"get_superuser_id: загружено superuser_id={superuser_id} из {CONFIG_FILE}")
+                logger.debug(f"get_superuser_id: загружено superuser_id={superuser_id} из {CONFIG_FILE}")
                 return superuser_id
     except Exception as e:
         logger.error(f"get_superuser_id: ошибка чтения config.json: {e}")
@@ -43,7 +43,7 @@ class IsSuperuserRule(ABCRule[Message]):
     async def check(self, message: Message) -> bool:
         superuser_id = get_superuser_id()
         result = message.from_id == superuser_id if superuser_id is not None else False
-        logger.info(f"IsSuperuserRule: from_id={message.from_id}, superuser_id={superuser_id}, result={result}")
+        logger.debug(f"IsSuperuserRule: from_id={message.from_id}, superuser_id={superuser_id}, result={result}")
         return result
 
 

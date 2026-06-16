@@ -223,12 +223,12 @@ async def handle_ban_command(message: Message, api: API) -> bool:
         
         # Вносим пользователя в черный список группы
         try:
-            await api.groups.ban_user(
-                group_id=GROUP_ID,
-                owner_id=target_user_id,
-                reason=0,  # другое
-                comment="Забанен администратором через !бан"
-            )
+            await api.request("groups.ban", {
+                "group_id": GROUP_ID,
+                "owner_id": target_user_id,
+                "reason": 0,
+                "comment": "Забанен администратором через !бан"
+            })
             logging.info(f"Пользователь {target_user_id} добавлен в черный список группы {GROUP_ID}")
         except Exception as ban_err:
             logging.warning(f"Не удалось добавить пользователя в черный список группы: {ban_err}")
