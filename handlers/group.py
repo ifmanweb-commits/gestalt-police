@@ -7,7 +7,7 @@ import re
 from vkbottle import API
 from vkbottle.bot import Message
 
-from config import EXPERTS_CHAT_ID, GROUP_ID
+from config import EXPERTS_CHAT_ID, GROUP_ID, SUPERUSER_ID
 from services.custom_commands import get_command_response
 from services.spam_check import perform_spam_check
 from services.vk_api import get_user_name
@@ -154,7 +154,7 @@ async def handle_ban_command(message: Message, api: API) -> bool:
     """
     Обработка команды !бан в групповых чатах.
     Банит пользователя, на сообщение которого был ответ.
-    Только для администраторов чата.
+    Только для администраторов чата и экспертов.
     
     Args:
         message: Сообщение VK
@@ -179,14 +179,16 @@ async def handle_ban_command(message: Message, api: API) -> bool:
         )
         return True
     
-    # Проверяем, что вызывающий — администратор
+    # Проверяем, что вызывающий — администратор ИЛИ эксперт
     from services.spam_check import is_user_admin_in_chat
+    from models.experts_db import is_expert
     
     is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
-    if not is_admin:
+    is_expert_user = is_expert(message.from_id)
+    if not (is_admin or is_expert_user):
         await api.messages.send(
             peer_id=message.peer_id,
-            message="❌ Только администраторы чата могут использовать !бан",
+            message="❌ Только администраторы чата и эксперты могут использовать !бан",
             random_id=random.randint(1, 2**31)
         )
         return True
@@ -221,24 +223,29 @@ async def handle_ban_command(message: Message, api: API) -> bool:
             user_id=target_user_id
         )
         
-        # Вносим пользователя в черный список группы
-        try:
-            await api.request("groups.ban", {
-                "group_id": GROUP_ID,
-                "owner_id": target_user_id,
-                "reason": 0,
-                "comment": "Забанен администратором через !бан"
-            })
-            logging.info(f"Пользователь {target_user_id} добавлен в черный список группы {GROUP_ID}")
-        except Exception as ban_err:
-            logging.warning(f"Не удалось добавить пользователя в черный список группы: {ban_err}")
-        
         await api.messages.send(
             peer_id=message.peer_id,
-            message=f"✅ Пользователь https://vk.com/id{target_user_id} забанен и добавлен в черный список группы.",
+            message=f"✅ Пользователь https://vk.com/id{target_user_id} удалён из беседы.",
             random_id=random.randint(1, 2**31)
         )
-        logging.info(f"Пользователь {target_user_id} забанен в чате {message.peer_id} администратором {message.from_id}")
+        logging.info(f"Пользователь {target_user_id} удалён из беседы {message.peer_id} администратором/экспертом {message.from_id}")
+        
+        # Уведомление суперадмину
+        if SUPERUSER_ID:
+            ban_report = (
+                f"🔨 Бан в чате {message.peer_id}\n"
+                f"👤 Забанен: https://vk.com/id{target_user_id}\n"
+                f"🛡️ Администратор/эксперт: https://vk.com/id{message.from_id}"
+            )
+            try:
+                await api.messages.send(
+                    peer_id=SUPERUSER_ID,
+                    message=ban_report,
+                    random_id=random.randint(1, 2**31)
+                )
+                logging.info(f"Уведомление о бане отправлено суперадмину {SUPERUSER_ID}")
+            except Exception as notify_err:
+                logging.warning(f"Не удалось отправить уведомление о бане суперадмину: {notify_err}")
         
     except Exception as e:
         logging.error(f"Ошибка при бане пользователя {target_user_id}: {e}")
