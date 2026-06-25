@@ -235,7 +235,8 @@ async def handle_ban_command(message: Message, api: API) -> bool:
             ban_report = (
                 f"🔨 Бан в чате {message.peer_id}\n"
                 f"👤 Забанен: https://vk.com/id{target_user_id}\n"
-                f"🛡️ Администратор/эксперт: https://vk.com/id{message.from_id}"
+                f"🛡️ Администратор/эксперт: https://vk.com/id{message.from_id}\n"
+                f"Админка для бана в группе: https://vk.com/praks_club?act=blacklist"
             )
             try:
                 await api.messages.send(
