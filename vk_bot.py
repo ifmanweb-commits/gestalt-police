@@ -43,6 +43,10 @@ from handlers.admin import (
 )
 from services.custom_commands import load_custom_commands
 
+# Исправление бага Pydantic в vkbottle
+from vkbottle.api.methods.messages import MessagesSendPeerIdsResponse
+MessagesSendPeerIdsResponse.model_rebuild()
+
 # Настройка логирования
 # Используем относительный путь для локальной разработки и абсолютный для Docker
 LOG_DIR = "logs" if os.path.exists("logs") else "/app/logs"
