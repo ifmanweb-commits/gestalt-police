@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from tinydb import Query
 from database import get_questions_db
+from services.logger import log
 
 
 def init_questions_db():
@@ -119,13 +120,12 @@ def add_expert_answer(question_id: int, expert_id: int, expert_name: str,
     Returns:
         bool: True если ответ успешно добавлен
     """
-    import logging
     db = get_questions_db()
     Question = Query()
     
     question = db.get(Question.id == question_id)
     if not question:
-        logging.error(f"Вопрос #{question_id} не найден в БД")
+        log(f"Вопрос #{question_id} не найден в БД")
         return False
     
     if 'expert_answers' not in question:
@@ -144,7 +144,7 @@ def add_expert_answer(question_id: int, expert_id: int, expert_name: str,
     # Используем явное обновление только поля expert_answers
     db.update({'expert_answers': question['expert_answers']}, Question.id == question_id)
     
-    logging.info(f"Ответ эксперта добавлен в вопрос #{question_id}. Всего ответов: {len(question['expert_answers'])}")
+    log(f"Ответ эксперта добавлен в вопрос #{question_id}. Всего ответов: {len(question['expert_answers'])}")
     
     return True
 
@@ -171,18 +171,17 @@ def update_question_post_id(question_id: int, post_id: int) -> bool:
     Returns:
         bool: True если успешно обновлено
     """
-    import logging
     db = get_questions_db()
     Question = Query()
     
     question = db.get(Question.id == question_id)
     if not question:
-        logging.error(f"Вопрос #{question_id} не найден в БД для обновления post_id")
+        log(f"Вопрос #{question_id} не найден в БД для обновления post_id")
         return False
     
     # Используем явное обновление только поля post_id
     db.update({'post_id': post_id}, Question.id == question_id)
-    logging.info(f"post_id={post_id} сохранён для вопроса #{question_id}")
+    log(f"post_id={post_id} сохранён для вопроса #{question_id}")
     return True
 
 

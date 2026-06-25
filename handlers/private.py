@@ -1,12 +1,12 @@
 """
 Обработчики личных сообщений для VK бота.
 """
-import logging
 import random
 from vkbottle import API
 from vkbottle.bot import Message
 
 from config import SUPERUSER_ID, EXPERTS_CHAT_ID
+from services.logger import log
 from models.questions_db import add_question, format_question_for_experts, get_question_by_id
 from services.vk_api import get_user_name
 
@@ -28,13 +28,13 @@ async def handle_question(message: Message, api: API) -> bool:
     
     user_id = message.from_id
     
-    logging.info(f"Получено сообщение от user {user_id}: {text[:100]}")
+    log(f"Получено сообщение от user {user_id}: {text[:100]}")
     
     # Обработка только #вопрос
     if not text.lower().startswith('#вопрос'):
         return False
     
-    logging.info(f"Обнаружен хештег #вопрос от user {user_id}")
+    log(f"Обнаружен хештег #вопрос от user {user_id}")
     question_text = text.replace('#вопрос', '', 1).strip()
     
     if not question_text:
@@ -48,34 +48,34 @@ async def handle_question(message: Message, api: API) -> bool:
     # Сохраняем в БД
     try:
         question_id = add_question(user_id, user_name, question_text, user_link)
-        logging.info(f"Вопрос #{question_id} сохранён в БД от {user_name} ({user_id})")
+        log(f"Вопрос #{question_id} сохранён в БД от {user_name} ({user_id})")
     except Exception as db_error:
-        logging.error(f"Ошибка сохранения в БД: {db_error}")
+        log(f"Ошибка сохранения в БД: {db_error}")
         await message.answer(f"❌ Ошибка сохранения вопроса: {db_error}")
         return True
     
     # Отправляем экспертам
-    logging.info(f"EXPERTS_CHAT_ID = {EXPERTS_CHAT_ID}, тип: {type(EXPERTS_CHAT_ID)}")
+    log(f"EXPERTS_CHAT_ID = {EXPERTS_CHAT_ID}, тип: {type(EXPERTS_CHAT_ID)}")
     if EXPERTS_CHAT_ID:
         expert_message = format_question_for_experts({
             "user_link": user_link,
             "question_text": question_text,
             "question_id": question_id
         })
-        logging.info(f"Отправка экспертам: {expert_message[:100]}")
+        log(f"Отправка экспертам: {expert_message[:100]}")
         try:
             await api.messages.send(
                 peer_id=EXPERTS_CHAT_ID,
                 message=expert_message,
                 random_id=random.randint(1, 2**31)
             )
-            logging.info(f"Вопрос #{question_id} отправлен экспертам в чат {EXPERTS_CHAT_ID}")
+            log(f"Вопрос #{question_id} отправлен экспертам в чат {EXPERTS_CHAT_ID}")
         except Exception as e:
-            logging.error(f"Ошибка отправки экспертам: {e}")
+            log(f"Ошибка отправки экспертам: {e}")
             await message.answer(f"❌ Ошибка при отправке вопроса: {e}")
             return True
     else:
-        logging.error("EXPERTS_CHAT_ID не установлен!")
+        log("EXPERTS_CHAT_ID не установлен!")
         await message.answer("❌ Ошибка: EXPERTS_CHAT_ID не настроен. Обратитесь к администратору.")
         return True
     

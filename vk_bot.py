@@ -2,7 +2,6 @@
 VK Bot - Gestalt Police
 Основной файл запуска бота.
 """
-import logging
 import os
 from dotenv import load_dotenv
 from vkbottle import Bot
@@ -42,23 +41,11 @@ from handlers.admin import (
     show_logs
 )
 from services.custom_commands import load_custom_commands
+from services.logger import setup_logging, log
 
 # Настройка логирования
-# Используем относительный путь для локальной разработки и абсолютный для Docker
-LOG_DIR = "logs" if os.path.exists("logs") else "/app/logs"
-try:
-    os.makedirs(LOG_DIR, exist_ok=True)
-except OSError:
-    LOG_DIR = "."
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filename=os.path.join(LOG_DIR, "bot.log"),
-    filemode="a",
-    force=True  # Принудительно перезаписываем конфигурацию логирования
-)
-logging.info("Логирование инициализировано")
+setup_logging()
+log("Логирование инициализировано")
 
 # Инициализация API и бота
 # group_api используется для модерации, команд, вопросов (группа "Гештальт-полиция")
@@ -247,18 +234,18 @@ def main():
     from services.tokens import load_tokens
     load_tokens()
     init_apis()
-    logging.info("API клиенты инициализированы")
+    log("API клиенты инициализированы")
     
     # Загрузка пользовательских команд из файла
     load_custom_commands()
-    logging.info("Пользовательские команды загружены")
+    log("Пользовательские команды загружены")
     
     # Инициализация баз данных
     init_databases()
-    logging.info("Базы данных экспертов инициализированы")
+    log("Базы данных экспертов инициализированы")
     
     init_questions_db()
-    logging.info("База данных вопросов инициализирована")
+    log("База данных вопросов инициализирована")
     
     bot.run_forever()
 

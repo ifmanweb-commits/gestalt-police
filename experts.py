@@ -5,9 +5,9 @@
 
 import os
 import re
-import logging
 from tinydb import TinyDB, Query
 from vkbottle import API
+from services.logger import log
 
 # Пути к файлам баз данных
 EXPERTS_FILE = "./experts.json"
@@ -58,10 +58,10 @@ async def resolve_user_id(api: API, identifier: str) -> int:
             if user_info:
                 return user_id
             else:
-                logging.warning(f"Пользователь с ID {user_id} не найден")
+                log(f"Пользователь с ID {user_id} не найден")
                 return None
         except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
+            log(f"Ошибка проверки ID {user_id}: {e}")
             return None
     
     # Пробуем извлечь из ссылки
@@ -80,7 +80,7 @@ async def resolve_user_id(api: API, identifier: str) -> int:
             if user_info:
                 return user_id
         except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
+            log(f"Ошибка проверки ID {user_id}: {e}")
             return None
     
     # Это короткое имя (screen_name)
@@ -89,10 +89,10 @@ async def resolve_user_id(api: API, identifier: str) -> int:
         if user_info:
             return user_info[0].id
         else:
-            logging.warning(f"Пользователь с именем {screen_name} не найден")
+            log(f"Пользователь с именем {screen_name} не найден")
             return None
     except Exception as e:
-        logging.error(f"Ошибка получения ID по screen_name {screen_name}: {e}")
+        log(f"Ошибка получения ID по screen_name {screen_name}: {e}")
         return None
 
 

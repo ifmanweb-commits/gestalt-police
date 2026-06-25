@@ -3,10 +3,10 @@
 """
 import os
 import re
-import logging
 from tinydb import Query
 from database import get_experts_db, get_questions_db
 from vkbottle import API
+from services.logger import log
 
 EXPERTS_FILE = "./experts.json"
 QUESTIONS_FILE = "./questions.json"
@@ -36,10 +36,10 @@ async def resolve_user_id(api: API, identifier: str) -> int:
             if user_info:
                 return user_id
             else:
-                logging.warning(f"Пользователь с ID {user_id} не найден")
+                log(f"Пользователь с ID {user_id} не найден")
                 return None
         except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
+            log(f"Ошибка проверки ID {user_id}: {e}")
             return None
     
     match = re.search(r'vk\.com/(?:id)?([a-zA-Z0-9_]+)', identifier)
@@ -55,7 +55,7 @@ async def resolve_user_id(api: API, identifier: str) -> int:
             if user_info:
                 return user_id
         except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
+            log(f"Ошибка проверки ID {user_id}: {e}")
             return None
     
     try:
@@ -63,10 +63,10 @@ async def resolve_user_id(api: API, identifier: str) -> int:
         if user_info:
             return user_info[0].id
         else:
-            logging.warning(f"Пользователь с именем {screen_name} не найден")
+            log(f"Пользователь с именем {screen_name} не найден")
             return None
     except Exception as e:
-        logging.error(f"Ошибка получения ID по screen_name {screen_name}: {e}")
+        log(f"Ошибка получения ID по screen_name {screen_name}: {e}")
         return None
 
 

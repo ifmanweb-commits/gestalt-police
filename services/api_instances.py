@@ -9,9 +9,9 @@
 - group_api из .env (VK_TOKEN)
 - wall_api из tokens.json (wall_token)
 """
-import logging
 from vkbottle import API
 from services.tokens import get_wall_token, get_group_token
+from services.logger import log
 
 # Глобальные переменные для API клиентов
 group_api = None
@@ -32,16 +32,16 @@ def init_apis():
     wall_token = get_wall_token()
     
     if not group_token:
-        logging.error("Групповой токен не найден в .env, group_api не инициализирован")
+        log("Групповой токен не найден в .env, group_api не инициализирован")
     else:
         group_api = API(group_token)
-        logging.info("group_api инициализирован (группа Гештальт-полиция)")
+        log("group_api инициализирован (группа Гештальт-полиция)")
     
     if not wall_token:
-        logging.error("wall_token не найден в tokens.json, wall_api не инициализирован")
+        log("wall_token не найден в tokens.json, wall_api не инициализирован")
     else:
         wall_api = API(wall_token)
-        logging.info("wall_api инициализирован (группа Зона роста)")
+        log("wall_api инициализирован (группа Зона роста)")
 
 
 async def check_token_validity(token: str) -> bool:
@@ -59,5 +59,5 @@ async def check_token_validity(token: str) -> bool:
         result = await test_api.users.get(user_ids=[1])
         return bool(result)
     except Exception as e:
-        logging.error(f"Токен невалиден: {e}")
+        log(f"Токен невалиден: {e}")
         return False

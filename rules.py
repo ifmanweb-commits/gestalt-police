@@ -2,9 +2,7 @@ from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import ABCRule
 import json
 import os
-import logging
-
-logger = logging.getLogger(__name__)
+from services.logger import log
 
 CONFIG_FILE = "./config.json"
 
@@ -15,10 +13,10 @@ def get_superuser_id() -> int:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
                 superuser_id = config.get('superuser_id')
-                logger.debug(f"get_superuser_id: загружено superuser_id={superuser_id} из {CONFIG_FILE}")
+                log(f"get_superuser_id: загружено superuser_id={superuser_id} из {CONFIG_FILE}")
                 return superuser_id
     except Exception as e:
-        logger.error(f"get_superuser_id: ошибка чтения config.json: {e}")
+        log(f"get_superuser_id: ошибка чтения config.json: {e}")
     return None
 
 
@@ -26,7 +24,7 @@ class IsPrivateRule(ABCRule[Message]):
     """Проверяет, что сообщение в личном чате"""
     async def check(self, message: Message) -> bool:
         result = message.peer_id == message.from_id
-        logger.debug(f"IsPrivateRule: peer_id={message.peer_id}, from_id={message.from_id}, result={result}")
+        log(f"IsPrivateRule: peer_id={message.peer_id}, from_id={message.from_id}, result={result}")
         return result
 
 
@@ -34,7 +32,7 @@ class IsGroupRule(ABCRule[Message]):
     """Проверяет, что сообщение в групповом чате (беседе)"""
     async def check(self, message: Message) -> bool:
         result = message.peer_id != message.from_id
-        logger.debug(f"IsGroupRule: peer_id={message.peer_id}, from_id={message.from_id}, result={result}")
+        log(f"IsGroupRule: peer_id={message.peer_id}, from_id={message.from_id}, result={result}")
         return result
 
 
@@ -43,7 +41,7 @@ class IsSuperuserRule(ABCRule[Message]):
     async def check(self, message: Message) -> bool:
         superuser_id = get_superuser_id()
         result = message.from_id == superuser_id if superuser_id is not None else False
-        logger.debug(f"IsSuperuserRule: from_id={message.from_id}, superuser_id={superuser_id}, result={result}")
+        log(f"IsSuperuserRule: from_id={message.from_id}, superuser_id={superuser_id}, result={result}")
         return result
 
 

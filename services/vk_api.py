@@ -2,8 +2,8 @@
 Сервис для работы с VK API.
 """
 import re
-import logging
 from vkbottle import API
+from services.logger import log
 
 
 async def get_user_name(api: API, user_id: int) -> str:
@@ -22,7 +22,7 @@ async def get_user_name(api: API, user_id: int) -> str:
         if user_info:
             return f"{user_info[0].first_name} {user_info[0].last_name}"
     except Exception as e:
-        logging.error(f"Не удалось получить имя пользователя {user_id}: {e}")
+        log(f"Не удалось получить имя пользователя {user_id}: {e}")
     return f"user{user_id}"
 
 
@@ -45,10 +45,10 @@ async def resolve_user_id(api: API, identifier: str) -> int:
             if user_info:
                 return user_id
             else:
-                logging.warning(f"Пользователь с ID {user_id} не найден")
+                log(f"Пользователь с ID {user_id} не найден")
                 return None
         except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
+            log(f"Ошибка проверки ID {user_id}: {e}")
             return None
     
     # Пробуем извлечь из ссылки
@@ -67,7 +67,7 @@ async def resolve_user_id(api: API, identifier: str) -> int:
             if user_info:
                 return user_id
         except Exception as e:
-            logging.error(f"Ошибка проверки ID {user_id}: {e}")
+            log(f"Ошибка проверки ID {user_id}: {e}")
             return None
     
     # Это короткое имя (screen_name)
@@ -76,8 +76,8 @@ async def resolve_user_id(api: API, identifier: str) -> int:
         if user_info:
             return user_info[0].id
         else:
-            logging.warning(f"Пользователь с именем {screen_name} не найден")
+            log(f"Пользователь с именем {screen_name} не найден")
             return None
     except Exception as e:
-        logging.error(f"Ошибка получения ID по screen_name {screen_name}: {e}")
+        log(f"Ошибка получения ID по screen_name {screen_name}: {e}")
         return None

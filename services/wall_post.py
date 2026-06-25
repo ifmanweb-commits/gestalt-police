@@ -3,9 +3,9 @@
 
 Использует wall_api (групповой токен wall_token) для публикации постов от имени сообщества "Зона роста".
 """
-import logging
 from vkbottle import API
 from config import GROUP_ID
+from services.logger import log
 
 
 # Лимит символов для поста VK
@@ -92,7 +92,7 @@ async def create_wall_post(api: API, question_text: str, expert_answer: dict) ->
     
     # Проверяем лимит
     if not is_post_within_limit(content):
-        logging.warning(f"Текст поста превышает лимит VK ({len(content)} символов)")
+        log(f"Текст поста превышает лимит VK ({len(content)} символов)")
         return -1
     
     return await _post_with_retry(api, owner_id=-GROUP_ID, message=content, is_create=True)
@@ -119,7 +119,7 @@ async def _post_with_retry(api: API, owner_id: int, message: str, is_create: boo
                 message=message
             )
             post_id = response.post_id
-            logging.info(f"Создан пост на стене группы: {post_id}")
+            log(f"Создан пост на стене группы: {post_id}")
             return post_id
         else:
             await api.wall.edit(
@@ -127,11 +127,11 @@ async def _post_with_retry(api: API, owner_id: int, message: str, is_create: boo
                 post_id=post_id,
                 message=message
             )
-            logging.info(f"Обновлён пост на стене группы: {post_id}")
+            log(f"Обновлён пост на стене группы: {post_id}")
             return True
             
     except Exception as e:
-        logging.error(f"Ошибка при {'создании' if is_create else 'редактировании'} поста на стене: {e}")
+        log(f"Ошибка при {'создании' if is_create else 'редактировании'} поста на стене: {e}")
         return -1 if is_create else False
 
 
@@ -155,7 +155,7 @@ async def update_wall_post(api: API, post_id: int, question_text: str, expert_an
     
     # Проверяем лимит
     if not is_post_within_limit(content):
-        logging.warning(f"Текст поста превышает лимит VK после добавления ответа ({len(content)} символов)")
+        log(f"Текст поста превышает лимит VK после добавления ответа ({len(content)} символов)")
         return False
     
     # owner_id со знаком минус для группы
@@ -187,8 +187,8 @@ async def create_comment(api: API, post_id: int, expert_answer: dict) -> int:
             message=content
         )
         comment_id = response.comment_id
-        logging.info(f"Создан комментарий к посту {post_id}: {comment_id}")
+        log(f"Создан комментарий к посту {post_id}: {comment_id}")
         return comment_id
     except Exception as e:
-        logging.error(f"Ошибка при создании комментария к посту {post_id}: {e}")
+        log(f"Ошибка при создании комментария к посту {post_id}: {e}")
         return -1

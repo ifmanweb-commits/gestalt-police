@@ -14,6 +14,8 @@ services:
       - ./bot_database.json:/app/bot_database.json
       - ./experts.json:/app/experts.json
       - ./questions.json:/app/questions.json
+      - ./tokens.json:/app/tokens.json
+      - ./admin_cache.json:/app/admin_cache.json
       # Монтируем директорию для логов
       - ./logs:/app/logs
     env_file:

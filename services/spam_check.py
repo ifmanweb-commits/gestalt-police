@@ -1,7 +1,6 @@
 """
 Сервис для проверки сообщений на спам.
 """
-import logging
 import random
 import re
 import emoji
@@ -10,6 +9,7 @@ from vkbottle import API
 
 from is_spam_message import new_is_spam_message, has_critical_patterns, has_mixed_words
 from database import get_bot_db, get_admin_cache_db
+from services.logger import log
 from tinydb import Query
 
 # Время жизни кэша администраторов (24 часа в секундах)
@@ -77,7 +77,7 @@ def _save_admin_cache_record(chat_id: int, admin_ids: list[int]) -> None:
     else:
         db.insert(record)
     
-    logging.info(f"Кэш администраторов для чата {chat_id} обновлён")
+    log(f"Кэш администраторов для чата {chat_id} обновлён")
 
 
 def _is_admin_cache_valid(chat_id: int) -> bool:
@@ -122,11 +122,11 @@ async def _update_admin_cache(api: API, chat_id: int) -> list[int]:
                 admin_ids.append(member.id)
         
         _save_admin_cache_record(chat_id, admin_ids)
-        logging.info(f"Получено {len(admin_ids)} администраторов для чата {chat_id}")
+        log(f"Получено {len(admin_ids)} администраторов для чата {chat_id}")
         return admin_ids
         
     except Exception as e:
-        logging.warning(f"Не удалось получить администраторов для чата {chat_id}: {e}")
+        log(f"Не удалось получить администраторов для чата {chat_id}: {e}")
         return []
 
 
@@ -151,26 +151,26 @@ async def is_user_admin_in_chat(api: API, chat_id: int, user_id: int) -> bool:
         
         # Проверяем только беседы (chat_id > 2000000000)
         if chat_id <= 2000000000:
-            logging.debug(f"Чат {chat_id} не является беседой, проверка админства не требуется")
+            log(f"Чат {chat_id} не является беседой, проверка админства не требуется")
             return False
         
         # Проверяем кэш
         if _is_admin_cache_valid(chat_id):
             record = _get_admin_cache_record(chat_id)
             if record and user_id in record.get('admin_ids', []):
-                logging.debug(f"Пользователь {user_id} найден в кэше администраторов чата {chat_id}")
+                log(f"Пользователь {user_id} найден в кэше администраторов чата {chat_id}")
                 return True
-            logging.debug(f"Пользователь {user_id} не найден в кэше администраторов чата {chat_id}")
+            log(f"Пользователь {user_id} не найден в кэше администраторов чата {chat_id}")
             return False
         
         # Кэш устарел или отсутствует - обновляем через API
-        logging.info(f"Кэш для чата {chat_id} устарел, обновление через API")
+        log(f"Кэш для чата {chat_id} устарел, обновление через API")
         admin_ids = await _update_admin_cache(api, chat_id)
         
         return user_id in admin_ids
         
     except Exception as e:
-        logging.warning(f"Не удалось проверить статус пользователя {user_id} в чате {chat_id}: {e}")
+        log(f"Не удалось проверить статус пользователя {user_id} в чате {chat_id}: {e}")
         return False
 
 
@@ -238,7 +238,7 @@ async def perform_spam_check(message, api: API):
                 try:
                     await api.messages.remove_chat_user(chat_id=chat_id, user_id=from_user)
                 except Exception as ban_error:
-                    logging.warning(f"Не удалось удалить пользователя из беседы: {ban_error}")
+                    log(f"Не удалось удалить пользователя из беседы: {ban_error}")
             
             db = get_bot_db()
             for user in db.all():
@@ -251,7 +251,7 @@ async def perform_spam_check(message, api: API):
                             random_id=random.randint(1, 2**31)
                         )
                     except Exception as e:
-                        logging.error(f"Ошибка при отправке уведомления: {e}")
+                        log(f"Ошибка при отправке уведомления: {e}")
             return
         except Exception as e:
             error_message = f"Возникла ошибка при автоматическом бане: {str(e)}\n\n{verdict}"
@@ -265,7 +265,7 @@ async def perform_spam_check(message, api: API):
                             random_id=random.randint(1, 2**31)
                         )
                     except Exception as e:
-                        logging.error(f"Ошибка при отправке уведомления об ошибке: {e}")
+                        log(f"Ошибка при отправке уведомления об ошибке: {e}")
             return
     
     elif (len(text) < 500) and (is_regular_spam or is_bot_ad):
@@ -294,6 +294,6 @@ async def perform_spam_check(message, api: API):
                             random_id=random.randint(1, 2**31)
                         )
                     except Exception as e:
-                        logging.error(f"Ошибка при отправке уведомления об удалении: {e}")
+                        log(f"Ошибка при отправке уведомления об удалении: {e}")
         except Exception as e:
-            logging.error(f"Ошибка при удалении спам-сообщения: {e}")
+            log(f"Ошибка при удалении спам-сообщения: {e}")

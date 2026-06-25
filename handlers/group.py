@@ -1,13 +1,13 @@
 """
 Обработчики групповых сообщений для VK бота.
 """
-import logging
 import random
 import re
 from vkbottle import API
 from vkbottle.bot import Message
 
 from config import EXPERTS_CHAT_ID, GROUP_ID, SUPERUSER_ID
+from services.logger import log
 from services.custom_commands import get_command_response
 from services.spam_check import perform_spam_check
 from services.vk_api import get_user_name
@@ -45,7 +45,7 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
     # Извлекаем user_id из текста исходного сообщения
     user_match = re.search(r'https://vk\.com/id(\d+)', reply_to.text)
     if not user_match:
-        logging.warning(f"Не удалось извлечь user_id из сообщения: {reply_to.text}")
+        log(f"Не удалось извлечь user_id из сообщения: {reply_to.text}")
         return False
     
     target_user_id = int(user_match.group(1))
@@ -70,7 +70,7 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                 expert_link=expert_link,
                 answer_text=message.text
             )
-            logging.info(f"Ответ эксперта #{question_id} сохранён в БД от {expert_name}")
+            log(f"Ответ эксперта #{question_id} сохранён в БД от {expert_name}")
             
             # Получаем полные данные вопроса
             question_data = get_question_full_data(question_id)
@@ -79,12 +79,12 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                 expert_answers = question_data.get('expert_answers', [])
                 post_id = question_data.get('post_id')
                 
-                logging.info(f"Вопрос #{question_id}: вопрос='{question_text[:50]}...', ответов={len(expert_answers)}, post_id={post_id}")
+                log(f"Вопрос #{question_id}: вопрос='{question_text[:50]}...', ответов={len(expert_answers)}, post_id={post_id}")
                 
                 # Проверяем, есть ли уже пост для этого вопроса
                 if post_id is None:
                     # Первый ответ - создаём новый пост (используем wall_api)
-                    logging.info(f"Первый ответ эксперта - создание поста для вопроса #{question_id}")
+                    log(f"Первый ответ эксперта - создание поста для вопроса #{question_id}")
                     new_post_id = await create_wall_post(
                         api=wall_api,
                         question_text=question_text,
@@ -97,12 +97,12 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                     if new_post_id > 0:
                         update_question_post_id(question_id, new_post_id)
                         post_id = new_post_id
-                        logging.info(f"ID поста {new_post_id} сохранён для вопроса #{question_id}")
+                        log(f"ID поста {new_post_id} сохранён для вопроса #{question_id}")
                     else:
-                        logging.warning(f"Не удалось создать пост для вопроса #{question_id}")
+                        log(f"Не удалось создать пост для вопроса #{question_id}")
                 else:
                     # Второй и последующие ответы - создаём комментарий к посту (используем wall_api)
-                    logging.info(f"Ответ эксперта #{len(expert_answers)} - создание комментария к посту {post_id}")
+                    log(f"Ответ эксперта #{len(expert_answers)} - создание комментария к посту {post_id}")
                     comment_id = await create_comment(
                         api=wall_api,
                         post_id=post_id,
@@ -113,12 +113,12 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                         }
                     )
                     if comment_id > 0:
-                        logging.info(f"Комментарий {comment_id} создан к посту {post_id}")
+                        log(f"Комментарий {comment_id} создан к посту {post_id}")
                     else:
-                        logging.warning(f"Не удалось создать комментарий к посту {post_id}")
+                        log(f"Не удалось создать комментарий к посту {post_id}")
             
         except Exception as db_error:
-            logging.error(f"Ошибка сохранения ответа в БД: {db_error}")
+            log(f"Ошибка сохранения ответа в БД: {db_error}")
     
     # Отправляем уведомление пользователю со ссылкой на пост
     if post_id:
@@ -136,7 +136,7 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                 message=notify_message,
                 random_id=random.randint(1, 2**31)
             )
-            logging.info(f"Уведомление отправлено пользователю {target_user_id}")
+            log(f"Уведомление отправлено пользователю {target_user_id}")
             
             # Уведомляем эксперта об отправке (без reply_to, так как это может быть другой чат)
             await group_api.messages.send(
@@ -145,7 +145,7 @@ async def handle_expert_answer(message: Message, group_api: API, wall_api: API) 
                 random_id=random.randint(1, 2**31)
             )
         except Exception as e:
-            logging.error(f"Ошибка при отправке уведомления пользователю: {e}")
+            log(f"Ошибка при отправке уведомления пользователю: {e}")
     
     return True
 
@@ -228,7 +228,7 @@ async def handle_ban_command(message: Message, api: API) -> bool:
             message=f"✅ Пользователь https://vk.com/id{target_user_id} удалён из беседы.",
             random_id=random.randint(1, 2**31)
         )
-        logging.info(f"Пользователь {target_user_id} удалён из беседы {message.peer_id} администратором/экспертом {message.from_id}")
+        log(f"Пользователь {target_user_id} удалён из беседы {message.peer_id} администратором/экспертом {message.from_id}")
         
         # Уведомление суперадмину
         if SUPERUSER_ID:
@@ -244,12 +244,12 @@ async def handle_ban_command(message: Message, api: API) -> bool:
                     message=ban_report,
                     random_id=random.randint(1, 2**31)
                 )
-                logging.info(f"Уведомление о бане отправлено суперадмину {SUPERUSER_ID}")
+                log(f"Уведомление о бане отправлено суперадмину {SUPERUSER_ID}")
             except Exception as notify_err:
-                logging.warning(f"Не удалось отправить уведомление о бане суперадмину: {notify_err}")
+                log(f"Не удалось отправить уведомление о бане суперадмину: {notify_err}")
         
     except Exception as e:
-        logging.error(f"Ошибка при бане пользователя {target_user_id}: {e}")
+        log(f"Ошибка при бане пользователя {target_user_id}: {e}")
         await api.messages.send(
             peer_id=message.peer_id,
             message=f"❌ Ошибка при бане: {e}",
@@ -282,16 +282,16 @@ async def handle_custom_command(message: Message, api: API) -> bool:
     from services.spam_check import is_user_admin_in_chat
     from models.experts_db import is_expert
     
-    logging.info(f"Проверка команды от user_id={message.from_id} в чате {message.peer_id}")
+    log(f"Проверка команды от user_id={message.from_id} в чате {message.peer_id}")
     
     is_admin = await is_user_admin_in_chat(api, message.peer_id, message.from_id)
-    logging.info(f"is_admin={is_admin}")
+    log(f"is_admin={is_admin}")
     
     is_expert_user = is_expert(message.from_id)
-    logging.info(f"is_expert={is_expert_user}")
+    log(f"is_expert={is_expert_user}")
     
     if not (is_admin or is_expert_user):
-        logging.info(f"Пользователь {message.from_id} не является администратором или экспертом в чате {message.peer_id}")
+        log(f"Пользователь {message.from_id} не является администратором или экспертом в чате {message.peer_id}")
         return False
     
     response = get_command_response(text)
@@ -308,15 +308,15 @@ async def handle_custom_command(message: Message, api: API) -> bool:
                 random_id=random.randint(1, 2**31)
             )
         else:
-            logging.info(f"Sending !msg {message.peer_id}")
+            log(f"Sending !msg {message.peer_id}")
             await api.messages.send(
                 peer_id=message.peer_id,
                 message=response,
                 random_id=random.randint(1, 2**31)
             )
-        logging.info(f"Команда успешно выполнена")
+        log(f"Команда успешно выполнена")
     except Exception as e:
-        logging.error(f"Ошибка при отправке ответа на команду: {e}")
+        log(f"Ошибка при отправке ответа на команду: {e}")
     
     return True
 

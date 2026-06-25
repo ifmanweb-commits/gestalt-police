@@ -2,8 +2,8 @@
 Сервис для работы с пользовательскими командами.
 """
 import json
-import logging
 import os
+from services.logger import log
 
 CUSTOM_COMMANDS_FILE = "./custom_commands.json"
 custom_commands = {}
@@ -21,21 +21,21 @@ def load_custom_commands() -> dict:
         if not os.path.exists(CUSTOM_COMMANDS_FILE):
             custom_commands = {}
             save_custom_commands()
-            logging.info("custom_commands.json не существовал, создан новый пустой файл")
+            log("custom_commands.json не существовал, создан новый пустой файл")
             return custom_commands
         
         with open(CUSTOM_COMMANDS_FILE, "r", encoding="utf-8") as f:
             custom_commands = json.load(f)
             if not isinstance(custom_commands, dict):
-                logging.error("custom_commands.json имеет неверную структуру. Загружен пустой словарь.")
+                log("custom_commands.json имеет неверную структуру. Загружен пустой словарь.")
                 custom_commands = {}
             else:
-                logging.info(f"Загружено {len(custom_commands)} пользовательских команд из {CUSTOM_COMMANDS_FILE}")
+                log(f"Загружено {len(custom_commands)} пользовательских команд из {CUSTOM_COMMANDS_FILE}")
     except json.JSONDecodeError as e:
-        logging.error(f"Ошибка парсинга JSON в custom_commands.json: {e}. Загружен пустой словарь.")
+        log(f"Ошибка парсинга JSON в custom_commands.json: {e}. Загружен пустой словарь.")
         custom_commands = {}
     except IOError as e:
-        logging.error(f"Ошибка чтения custom_commands.json: {e}")
+        log(f"Ошибка чтения custom_commands.json: {e}")
         custom_commands = {}
     
     return custom_commands
@@ -50,7 +50,7 @@ def save_custom_commands() -> None:
         with open(CUSTOM_COMMANDS_FILE, "w", encoding="utf-8") as f:
             json.dump(custom_commands, f, ensure_ascii=False, indent=2)
     except IOError as e:
-        logging.error(f"Ошибка записи custom_commands.json: {e}")
+        log(f"Ошибка записи custom_commands.json: {e}")
         raise
 
 

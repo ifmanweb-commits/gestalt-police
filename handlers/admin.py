@@ -1,7 +1,6 @@
 """
 Обработчики админ-команд для VK бота.
 """
-import logging
 import os
 import re
 from vkbottle import API
@@ -11,6 +10,7 @@ from config import SUPERUSER_ID
 from database import get_bot_db
 from models.experts_db import add_expert, remove_expert, get_expert_list
 from services.custom_commands import add_command, remove_command, get_all_commands, save_custom_commands
+from services.logger import log
 from services.vk_api import resolve_user_id
 from services.spam_check import is_user_admin_in_chat, _update_admin_cache, _is_admin_cache_valid, _get_admin_cache_record
 from services.tokens import get_wall_token, update_wall_token
@@ -19,14 +19,12 @@ from services.api_instances import check_token_validity
 from config import GROUP_ID
 from tinydb import Query
 
-logger = logging.getLogger(__name__)
-
 
 async def register_chat(message: Message, api: API):
     """
     /register <chat_id> - Зарегистрировать чат.
     """
-    logger.info(f"register_chat вызван от user_id={message.from_id}, текст={message.text}")
+    log(f"register_chat вызван от user_id={message.from_id}, текст={message.text}")
     args = message.text.split()
     if len(args) < 2:
         await message.answer('Добавьте идентификатор чата после команды.')
@@ -34,34 +32,34 @@ async def register_chat(message: Message, api: API):
     
     try:
         chat_id = int(args[1])
-        logger.info(f"Парсинг chat_id={chat_id} успешен")
+        log(f"Парсинг chat_id={chat_id} успешен")
     except ValueError as e:
-        logger.error(f"Ошибка парсинга chat_id: {e}")
+        log(f"Ошибка парсинга chat_id: {e}")
         await message.answer('Неверный формат идентификатора чата. Используйте числовой ID.')
         return
     
     user_id = message.from_id
-    logger.info(f"Проверка пользователя в БД: user_id={user_id}")
+    log(f"Проверка пользователя в БД: user_id={user_id}")
     db = get_bot_db()
     User = Query()
     user_data = db.get(User.user_id == user_id)
     
     if user_data:
-        logger.info(f"Пользователь найден в БД: {user_data}")
+        log(f"Пользователь найден в БД: {user_data}")
         if chat_id not in user_data['chats']:
             user_data['chats'].append(chat_id)
             if 'delete_statuses' not in user_data:
                 user_data['delete_statuses'] = {}
             user_data['delete_statuses'][str(chat_id)] = False
             db.update(user_data, User.user_id == user_id)
-            logger.info(f"Добавлен чат {chat_id} в список пользователя")
+            log(f"Добавлен чат {chat_id} в список пользователя")
     else:
-        logger.info(f"Пользователь не найден, создаем новую запись")
+        log(f"Пользователь не найден, создаем новую запись")
         db.insert({'user_id': user_id, 'chats': [chat_id], 'delete_statuses': {str(chat_id): False}})
-        logger.info(f"Создана новая запись для пользователя {user_id}")
+        log(f"Создана новая запись для пользователя {user_id}")
     
     await message.answer(f'Зарегистрирован чат {chat_id}')
-    logger.info(f"register_chat завершен успешно")
+    log(f"register_chat завершен успешно")
 
 
 async def unregister_chat(message: Message, api: API):
@@ -447,5 +445,5 @@ async def test_post_cmd(message: Message, api: API):
         await message.answer(f"✅ Тестовый пост успешно опубликован!\n\nID поста: {post_id}")
         
     except Exception as e:
-        logging.error(f"Ошибка при публикации тестового поста: {e}")
+        log(f"Ошибка при публикации тестового поста: {e}")
         await message.answer(f"❌ Ошибка при публикации поста: {e}")
